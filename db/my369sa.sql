@@ -1,0 +1,98 @@
+CREATE TABLE `trades_open` (
+  `id` int(11) NOT NULL,
+  `ticket` int(11) DEFAULT NULL,
+  `group_id` int(11) DEFAULT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `profit` decimal(15,2) DEFAULT NULL,
+  `open_time` datetime DEFAULT NULL,
+  `bid_price` decimal(15,5) DEFAULT NULL,
+  `ask_price` decimal(15,5) DEFAULT NULL,
+  `last_update` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `trades_closed` (
+  `id` int(11) NOT NULL,
+  `ticket` int(11) DEFAULT NULL,
+  `config_id` int(11) DEFAULT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `close_price` decimal(15,5) DEFAULT NULL,
+  `profit` decimal(15,2) DEFAULT NULL,
+  `open_time` datetime DEFAULT NULL,
+  `close_time` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `trades_group` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `profit` decimal(15,2) DEFAULT NULL,
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `trades_config` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `stop_loss` decimal(15,5) DEFAULT NULL,
+  `take_profit` decimal(15,5) DEFAULT NULL,
+  `remarks` varchar(300) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;  
+
+CREATE TABLE `trades_config_closed` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `stop_loss` decimal(15,5) DEFAULT NULL,
+  `take_profit` decimal(15,5) DEFAULT NULL,
+  `remarks` varchar(300) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;  
+
+CREATE TABLE `trades_pending` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;  
+
+CREATE TABLE `trades_order` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL,
+  `ticket` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `trades_order_executed` (
+  `id` int(11) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(10) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `open_price` decimal(15,5) DEFAULT NULL,
+  `volume` decimal(15,2) DEFAULT NULL,
+  `ticket` int(11) DEFAULT NULL,
+  `action` enum('open','closed') DEFAULT NULL,
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
