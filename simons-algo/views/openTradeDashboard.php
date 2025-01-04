@@ -35,8 +35,8 @@
                         <th>Open Time</th>
                         <th>Status</th>
                         <th class="text-end">Magic Number</th>
-                        <!-- New columns -->
-                        <th class="text-end">Current Price</th>
+                        <th class="text-end">Weighted Open Price</th>
+                        <th class="text-end">Currency Price</th>
                         <th class="text-end">Total Lot</th>
                         <th class="text-end">Total Trades</th>
                         <th class="text-end">Profit/Loss</th>
@@ -55,72 +55,115 @@
 
         // Function to fetch trades data and update the table
         async function fetchAndUpdateTrades() {
-            try {
-                const response = await axios.get(apiEndpoint);
-                const tradesData = response.data;
+        try {
+            const response = await axios.get(apiEndpoint);
+            const tradesData = response.data;
 
-                if (tradesData.status === "success" && tradesData.data) {
-                    const trades = tradesData.data;
-                    const tableBody = document.querySelector("#tradesTable tbody");
+            if (tradesData.status === "success" && tradesData.data) {
+                const trades = tradesData.data;
+                const tableBody = document.querySelector("#tradesTable tbody");
 
-                    // Clear existing table rows
-                    tableBody.innerHTML = "";
+                // Clear existing table rows
+                tableBody.innerHTML = "";
 
-                    // Initialize totals
-                    let totalLot = 0;
-                    let totalProfitLoss = 0;
-                    let totalTrades = trades.length;
+                // Group trades by (Pair, Type, Magic Number)
+                const groupedTrades = {};
+                let totalLot = 0; // Correct Total Lot (sum of all trade volumes)
+                let totalTradesCount = 0; // Correct Total Trades (count of all trades)
+                let totalProfitLoss = 0; // Total Profit/Loss
 
-                    // Populate table with new data
-                    trades.forEach((trade, index) => {
-                        totalLot += parseFloat(trade.volume);
-                        totalProfitLoss += parseFloat(trade.profit);
+                trades.forEach((trade) => {
+                    // Safely access and parse trade properties with defaults
+                    const pair = trade.pair || "N/A";
+                    const orderType = trade.order_type || "N/A";
+                    const magicNumber = trade.magic_number || 0;
+                    const volume = parseFloat(trade.volume || 0);
+                    const profit = parseFloat(trade.profit || 0);
+                    const openPrice = parseFloat(trade.open_price || 0);
 
-                        const row = `
-                            <tr>
-                                <td>${index + 1}</td>
-                                <td>${trade.pair}</td>
-                                <td>${trade.order_type}</td>
-                                <td class="text-end">${parseFloat(trade.volume).toFixed(2)}</td>
-                                <td class="text-end">${parseFloat(trade.profit).toFixed(2)}</td>
-                                <td class="text-end">${parseFloat(trade.open_price).toFixed(5)}</td>
-                                <td class="text-end">${parseFloat(trade.stop_loss).toFixed(5)}</td>
-                                <td class="text-end">${parseFloat(trade.take_profit).toFixed(5)}</td>
-                                <td>${trade.open_time}</td>
-                                <td>${trade.status}</td>
-                                <td class="text-end">${trade.magic_number}</td>
-                                <td class="text-end">${parseFloat(trade.current_price).toFixed(5) || "N/A"}</td>
-                                <td class="text-end">${totalLot.toFixed(2)}</td>
-                                <td class="text-end">${totalTrades}</td>
-                                <td class="text-end">${totalProfitLoss.toFixed(2)}</td>
-                            </tr>
-                        `;
-                        tableBody.insertAdjacentHTML("beforeend", row);
-                    });
+                    // Update overall totals
+                    totalLot += volume;
+                    totalTradesCount += 1;
+                    totalProfitLoss += profit;
 
-                    // Append totals as a summary row
-                    const summaryRow = `
-                        <tr class="table-info">
-                            <td colspan="11" class="text-end"><strong>Totals:</strong></td>
-                            <td class="text-end">${totalLot.toFixed(2)}</td>
-                            <td class="text-end">${totalTrades}</td>
-                            <td class="text-end">${totalProfitLoss.toFixed(2)}</td>
+                    // Group by Pair, Type, and Magic Number
+                    const key = `${pair}|${orderType}|${magicNumber}`;
+                    if (!groupedTrades[key]) {
+                        groupedTrades[key] = {
+                            pair,
+                            type: orderType,
+                            magicNumber,
+                            totalVolume: 0,
+                            totalProfit: 0,
+                            totalWeightedPrice: 0, // For Weighted Open Price
+                            totalTrades: 0,
+                        };
+                    }
+
+                    // Update grouped data
+                    groupedTrades[key].totalVolume += volume;
+                    groupedTrades[key].totalProfit += profit;
+                    groupedTrades[key].totalWeightedPrice += volume * openPrice;
+                    groupedTrades[key].totalTrades += 1;
+                });
+
+                // Populate table with grouped data
+                let index = 1;
+
+                Object.values(groupedTrades).forEach((group) => {
+                    const weightedOpenPrice =
+                        group.totalVolume > 0
+                            ? (group.totalWeightedPrice / group.totalVolume).toFixed(5)
+                            : "N/A";
+
+                    const row = `
+                        <tr>
+                            <td>${index++}</td>
+                            <td>${group.pair}</td>
+                            <td>${group.type}</td>
+                            <td class="text-end">${group.totalVolume.toFixed(2)}</td>
+                            <td class="text-end">${group.totalProfit.toFixed(2)}</td>
+                            <td class="text-end">${weightedOpenPrice}</td>
+                            <td class="text-end">-</td> <!-- Stop Loss -->
+                            <td class="text-end">-</td> <!-- Take Profit -->
+                            <td class="text-end">-</td> <!-- Open Time -->
+                            <td>open</td>
+                            <td class="text-end">${group.magicNumber}</td>
+                            <td class="text-end">${weightedOpenPrice}</td>
+                            <td class="text-end">-</td> <!-- Currency Price -->
+                            <td class="text-end">${group.totalVolume.toFixed(2)}</td>
+                            <td class="text-end">${group.totalTrades}</td>
+                            <td class="text-end">${group.totalProfit.toFixed(2)}</td>
                         </tr>
                     `;
-                    tableBody.insertAdjacentHTML("beforeend", summaryRow);
-                } else {
-                    console.error("No trades data found or API error.");
-                }
-            } catch (error) {
-                console.error("Error fetching trades:", error);
-            }
-        }
+                    tableBody.insertAdjacentHTML("beforeend", row);
+                });
 
-        // Fetch and update trades every 10 seconds
-        document.addEventListener("DOMContentLoaded", () => {
-            fetchAndUpdateTrades(); // Initial fetch
-            setInterval(fetchAndUpdateTrades, 10000); // Refresh every 10 seconds
-        });
+                // Append totals as a summary row
+                const summaryRow = `
+                    <tr class="table-info">
+                        <td colspan="12" class="text-end"><strong>Totals:</strong></td>
+                        <td class="text-end">-</td>
+                        <td class="text-end">${totalLot.toFixed(2)}</td> <!-- Correct Total Lot -->
+                        <td class="text-end">${totalTradesCount}</td> <!-- Correct Total Trades -->
+                        <td class="text-end">${totalProfitLoss.toFixed(2)}</td> <!-- Total Profit/Loss -->
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML("beforeend", summaryRow);
+            } else {
+                console.error("No trades data found or API error.");
+            }
+        } catch (error) {
+            console.error("Error fetching trades:", error);
+        }
+    }
+
+    // Fetch and update trades every 10 seconds
+    document.addEventListener("DOMContentLoaded", () => {
+        fetchAndUpdateTrades(); // Initial fetch
+        setInterval(fetchAndUpdateTrades, 10000); // Refresh every 10 seconds
+    });
+
     </script>
 </body>
 </html>

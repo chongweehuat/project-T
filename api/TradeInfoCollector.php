@@ -6,14 +6,6 @@ require_once '/var/www/models/TradeModel.php';
 // Set timezone
 date_default_timezone_set('Asia/Kuala_Lumpur');
 
-// Define a debug log function (currently disabled)
-function debugLog($message) {
-    //Debug logging is disabled. Uncomment the following lines to enable logging.
-    $logFile = '/var/www/api/logs/debug.log';
-    $timestamp = date('Y-m-d H:i:s');
-    file_put_contents($logFile, "[$timestamp] $message\n", FILE_APPEND);
-}
-
 // Function to clean the $_POST data
 function cleanPostData($postData) {
     $cleanedData = [];
@@ -24,9 +16,8 @@ function cleanPostData($postData) {
     return $cleanedData;
 }
 
-// Clean and log the incoming POST data
+// Clean the incoming POST data
 $_POST = cleanPostData($_POST);
-//debugLog("Received POST data: " . var_export($_POST, true));
 
 // Extract and sanitize POST parameters
 $data = [
@@ -37,29 +28,14 @@ $data = [
     'volume' => isset($_POST['volume']) ? floatval($_POST['volume']) : null,
     'profit' => isset($_POST['profit']) ? floatval($_POST['profit']) : null,
     'open_price' => isset($_POST['open_price']) ? floatval($_POST['open_price']) : null,
-    'stop_loss' => isset($_POST['stop_loss']) ? floatval($_POST['stop_loss']) : null,
-    'take_profit' => isset($_POST['take_profit']) ? floatval($_POST['take_profit']) : null,
-    'open_time' => isset($_POST['open_time']) ? rtrim($_POST['open_time'], "\0") : null, // Clean open_time
     'magic_number' => isset($_POST['magic_number']) ? intval($_POST['magic_number']) : null,
-    'remarks' => $_POST['remarks'] ?? null,
+    'bid_price' => isset($_POST['bid_price']) ? floatval($_POST['bid_price']) : null,
+    'ask_price' => isset($_POST['ask_price']) ? floatval($_POST['ask_price']) : null,
 ];
 
-// Convert the open_time to MySQL datetime format
-function convertToMySQLDateTime($timeString) {
-    if (!$timeString) {
-        return null;
-    }
-
-    $dateTime = DateTime::createFromFormat('Y.m.d H:i', $timeString);
-    return $dateTime ? $dateTime->format('Y-m-d H:i:s') : null;
-}
-
-$data['open_time'] = convertToMySQLDateTime($data['open_time']);
-
 // Validate required data
-if (!$data['account_number'] || !$data['symbol'] || !$data['type'] || !isset($data['magic_number']) || !$data['open_time']) {
+if (!$data['account_number'] || !$data['symbol'] || !$data['type'] || !isset($data['magic_number'])) {
     http_response_code(400); // Bad Request
-    debugLog("Invalid or missing trade data: " . var_export($data, true));
     echo json_encode(["status" => "error", "message" => "Invalid or missing trade data."]);
     exit;
 }
@@ -69,18 +45,58 @@ try {
     $db = Database::connect('trade');
     $tradeModel = new TradeModel($db);
 
-    // Upsert the trade into the database
-    if ($tradeModel->upsertTrade($data)) {
-        http_response_code(200);
-        // debugLog("Trade data processed successfully for symbol: " . $data['symbol']);
-        echo json_encode(["status" => "success", "message" => "Trade data processed successfully."]);
-    } else {
-        http_response_code(400); // Bad Request
-        debugLog("Failed to process trade data for symbol: " . $data['symbol']);
-        echo json_encode(["status" => "error", "message" => "Failed to process trade data."]);
+    // Fetch all trades for the account
+    $existingTrades = $tradeModel->getTradesByAccount($data['account_number']);
+
+    // Group trades by symbol, order type, and magic number
+    $groupedTrades = [];
+    foreach ($existingTrades as $trade) {
+        $key = "{$trade['pair']}|{$trade['order_type']}|{$trade['magic_number']}";
+
+        if (!isset($groupedTrades[$key])) {
+            $groupedTrades[$key] = [
+                'symbol' => $trade['pair'],
+                'type' => $trade['order_type'],
+                'magic_number' => $trade['magic_number'],
+                'total_volume' => 0,
+                'total_profit' => 0,
+                'volume_price_product' => 0, // For prorated open price
+                'trade_count' => 0,
+                'currency_price' => 0, // Bid or Ask price
+            ];
+        }
+
+        // Aggregate data
+        $groupedTrades[$key]['total_volume'] += $trade['volume'];
+        $groupedTrades[$key]['total_profit'] += $trade['profit'];
+        $groupedTrades[$key]['volume_price_product'] += $trade['volume'] * $trade['open_price'];
+        $groupedTrades[$key]['trade_count'] += 1;
+
+        // Determine Bid/Ask price based on order type
+        if ($trade['order_type'] === 'buy') {
+            $groupedTrades[$key]['currency_price'] = $trade['ask_price'];
+        } elseif ($trade['order_type'] === 'sell') {
+            $groupedTrades[$key]['currency_price'] = $trade['bid_price'];
+        }
     }
+
+    // Finalize calculations for each group
+    foreach ($groupedTrades as &$group) {
+        $group['prorated_open_price'] = $group['total_volume'] > 0 
+            ? $group['volume_price_product'] / $group['total_volume'] 
+            : 0; // Avoid division by zero
+        unset($group['volume_price_product']); // Remove temporary field
+    }
+
+    // Upsert grouped data into the database
+    foreach ($groupedTrades as $group) {
+        $tradeModel->upsertGroupedTrade($data['account_number'], $group);
+    }
+
+    http_response_code(200);
+    echo json_encode(["status" => "success", "message" => "Trade data processed successfully."]);
+
 } catch (PDOException $e) {
-    debugLog("Database error: " . $e->getMessage());
     http_response_code(500); // Internal Server Error
     echo json_encode(["status" => "error", "message" => "Database error."]);
     exit;

@@ -75,4 +75,41 @@ class TradeModel {
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function upsertGroupedTrade($accountNumber, $groupedTrade) {
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO aggregated_trades 
+                (account_id, pair, order_type, volume, profit, prorated_open_price, magic_number, trade_count, currency_price) 
+                VALUES 
+                (
+                    (SELECT id FROM accounts WHERE login = :account_number), 
+                    :pair, :order_type, :volume, :profit, :prorated_open_price, :magic_number, :trade_count, :currency_price
+                )
+                ON DUPLICATE KEY UPDATE
+                    volume = VALUES(volume),
+                    profit = VALUES(profit),
+                    prorated_open_price = VALUES(prorated_open_price),
+                    trade_count = VALUES(trade_count),
+                    currency_price = VALUES(currency_price)
+            ");
+    
+            $stmt->execute([
+                ':account_number' => $accountNumber,
+                ':pair' => $groupedTrade['symbol'],
+                ':order_type' => $groupedTrade['type'],
+                ':volume' => $groupedTrade['total_volume'],
+                ':profit' => $groupedTrade['total_profit'],
+                ':prorated_open_price' => $groupedTrade['prorated_open_price'],
+                ':magic_number' => $groupedTrade['magic_number'],
+                ':trade_count' => $groupedTrade['trade_count'],
+                ':currency_price' => $groupedTrade['currency_price'],
+            ]);
+    
+            return true;
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+    
 }

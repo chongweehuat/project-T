@@ -5,7 +5,7 @@ require_once '/var/www/models/TradeModel.php';
 
 // Set headers for JSON response
 header('Content-Type: application/json');
-header("Access-Control-Allow-Origin: https://sa.my369.click"); // Specify your frontend URL
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
