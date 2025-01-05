@@ -1,4 +1,5 @@
 -- Tracks open trades
+-- idx_group_id for faster lookups 
 CREATE TABLE `trades_open` (
   `id` int(11) NOT NULL,
   `ticket` int(11) NOT NULL,
@@ -18,7 +19,9 @@ CREATE TABLE `trades_open` (
 ALTER TABLE `trades_open`
   ADD PRIMARY KEY (`id`),
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+CREATE INDEX idx_group_id ON trades_open(group_id);  
+ALTER TABLE trades_open MODIFY volume DECIMAL(15,2) DEFAULT 0.00;
+ALTER TABLE trades_open MODIFY order_type ENUM('buy', 'sell') DEFAULT 'buy';
 
 -- Tracks closed trades
 CREATE TABLE `trades_closed` (
@@ -39,6 +42,8 @@ CREATE TABLE `trades_closed` (
 ALTER TABLE `trades_closed`
   ADD PRIMARY KEY (`id`),
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+CREATE INDEX idx_close_time ON trades_closed(close_time); 
+ALTER TABLE trades_closed MODIFY profit DECIMAL(15,2) DEFAULT 0.00; 
 
 -- Represents aggregated/grouped trades by account_id, magic_number, pair, and order_type
 CREATE TABLE `trades_group` (
@@ -47,9 +52,10 @@ CREATE TABLE `trades_group` (
   `magic_number` int(11) DEFAULT NULL,
   `pair` varchar(20) NOT NULL,
   `order_type` enum('buy','sell') DEFAULT NULL,
-  `volume` decimal(15,2) DEFAULT NULL,
+  `total_volume` decimal(15,2) DEFAULT NULL,
   `weighted_open_price` decimal(15,5) DEFAULT NULL,
   `profit` decimal(15,2) DEFAULT NULL,
+  `last_update` datetime DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_group`
   ADD PRIMARY KEY (`id`),
@@ -67,6 +73,7 @@ CREATE TABLE `trades_config` (
   `stop_loss` decimal(15,5) DEFAULT NULL,
   `take_profit` decimal(15,5) DEFAULT NULL,
   `remarks` varchar(300) DEFAULT NULL
+  `last_update` datetime DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_config`
   ADD PRIMARY KEY (`id`),
@@ -99,7 +106,8 @@ CREATE TABLE `trades_pending` (
   `pair` varchar(20) NOT NULL,
   `order_type` enum('buy','sell') DEFAULT NULL,
   `open_price` decimal(15,5) DEFAULT NULL,
-  `volume` decimal(15,2) DEFAULT NULL
+  `volume` decimal(15,2) DEFAULT NULL,
+  `expiration_time` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_pending`
   ADD PRIMARY KEY (`id`),
@@ -119,6 +127,8 @@ CREATE TABLE `trades_order` (
 ALTER TABLE `trades_order`
   ADD PRIMARY KEY (`id`),
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT; 
+CREATE INDEX idx_ticket ON trades_order(ticket);
+ 
 
 -- order executed by OrderExecutor EA, move from trades_order
 -- separate table for easy archived
@@ -136,3 +146,4 @@ CREATE TABLE `trades_order_executed` (
 ALTER TABLE `trades_order_executed`
   ADD PRIMARY KEY (`id`),
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+CREATE INDEX idx_ticket_executed ON trades_order_executed(ticket);  
