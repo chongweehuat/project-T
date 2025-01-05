@@ -142,6 +142,7 @@ CREATE TABLE `trades_order_executed` (
   `volume` decimal(15,2) DEFAULT NULL,
   `ticket` int(11) DEFAULT NULL,
   `action` enum('open','closed') DEFAULT NULL,
+  `execution_time` DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_order_executed`
   ADD PRIMARY KEY (`id`),
