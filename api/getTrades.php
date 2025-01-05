@@ -2,45 +2,58 @@
 
 require_once '/var/www/db/database.php';
 require_once '/var/www/models/TradeModel.php';
+require_once '/var/www/utils/Logger.php'; // Use Logger utility
 
-// Set headers for JSON response
-header('Content-Type: application/json');
+// Set timezone
+date_default_timezone_set('Asia/Kuala_Lumpur');
+
+// Add CORS headers
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Content-Type: application/json");
 
-// Handle preflight requests
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
+// Capture the account ID from the query string
+$accountId = isset($_GET['account_id']) ? intval($_GET['account_id']) : null;
 
-// Check if login parameter is provided
-$login = $_GET['login'] ?? null;
-
-if (!$login) {
-    http_response_code(400); // Bad Request
-    echo json_encode(["status" => "error", "message" => "Login parameter is required."]);
+// Validate the account ID
+if (!$accountId) {
+    logMessage("Invalid or missing account_id parameter.");
+    http_response_code(400);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid or missing account_id parameter."
+    ]);
     exit;
 }
 
 try {
     // Connect to the database
-    $db = Database::connect('trade');
+    $db = Database::connect("trade");
     $tradeModel = new TradeModel($db);
 
-    // Fetch trades for the given account login
-    $trades = $tradeModel->getTradesByAccount($login);
+    // Fetch grouped trades for the specified account ID
+    $trades = $tradeModel->getGroupedTrades($accountId);
 
-    if ($trades) {
-        echo json_encode(["status" => "success", "data" => $trades]);
-    } else {
-        echo json_encode(["status" => "error", "message" => "No trades found for the account."]);
+    // Check if data exists
+    if (!$trades) {
+        logMessage("No grouped trades found for account_id={$accountId}");
+        echo json_encode([
+            "status" => "success",
+            "data" => []
+        ]);
+        exit;
     }
-} catch (PDOException $e) {
-    http_response_code(500); // Internal Server Error
-    echo json_encode(["status" => "error", "message" => "Database error: " . $e->getMessage()]);
-    exit;
-}
 
-?>
+    // Return the grouped trades data
+    echo json_encode([
+        "status" => "success",
+        "data" => $trades
+    ]);
+} catch (Exception $e) {
+    // Log and handle server errors
+    logMessage("Error fetching grouped trades: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Failed to fetch grouped trades."
+    ]);
+}

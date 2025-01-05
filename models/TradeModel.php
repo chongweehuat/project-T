@@ -10,83 +10,95 @@ class TradeModel {
     }
 
     /**
-     * Synchronize trades_open with the latest data.
-     * Implements "Found Update, New Insert, Not Found Delete" approach.
+     * Synchronize a single trade into the trades_open table.
+     * Implements "Found Update, New Insert".
      */
-    public function syncTradesOpen($accountId, $trades) {
+    public function syncSingleTrade($accountId, $trade) {
         try {
-            $this->db->beginTransaction();
+            // Check if the trade already exists
+            $stmt = $this->db->prepare("SELECT id FROM trades_open WHERE account_id = :account_id AND ticket = :ticket");
+            $stmt->execute([
+                ':account_id' => $accountId,
+                ':ticket' => $trade['ticket']
+            ]);
+            $existingTrade = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Fetch existing tickets for the account
-            $stmt = $this->db->prepare("SELECT ticket FROM trades_open WHERE account_id = :account_id");
-            $stmt->execute([':account_id' => $accountId]);
-            $existingTickets = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-
-            $newTickets = array_column($trades, 'ticket');
-            $toDelete = array_diff($existingTickets, $newTickets);
-
-            // Delete trades not found in the new data
-            if (!empty($toDelete)) {
-                $stmt = $this->db->prepare("DELETE FROM trades_open WHERE ticket IN (" . implode(',', array_map('intval', $toDelete)) . ")");
-                $stmt->execute();
-                logMessage("Deleted trades: " . implode(',', $toDelete));
-            }
-
-            // Insert or update trades
-            $stmtInsert = $this->db->prepare("
-                INSERT INTO trades_open (ticket, account_id, magic_number, pair, order_type, volume, open_price, profit, open_time, bid_price, ask_price, last_update)
-                VALUES (:ticket, :account_id, :magic_number, :pair, :order_type, :volume, :open_price, :profit, :open_time, :bid_price, :ask_price, NOW())
-                ON DUPLICATE KEY UPDATE
-                    magic_number = VALUES(magic_number),
-                    pair = VALUES(pair),
-                    order_type = VALUES(order_type),
-                    volume = VALUES(volume),
-                    open_price = VALUES(open_price),
-                    profit = VALUES(profit),
-                    bid_price = VALUES(bid_price),
-                    ask_price = VALUES(ask_price),
-                    last_update = NOW()
-            ");
-
-            foreach ($trades as $trade) {
-                $stmtInsert->execute([
-                    ':ticket'       => $trade['ticket'],
-                    ':account_id'   => $accountId,
+            if ($existingTrade) {
+                // Update the existing trade
+                $stmt = $this->db->prepare("
+                    UPDATE trades_open 
+                    SET 
+                        pair = :pair,
+                        order_type = :order_type,
+                        volume = :volume,
+                        open_price = :open_price,
+                        profit = :profit,
+                        open_time = :open_time,
+                        bid_price = :bid_price,
+                        ask_price = :ask_price,
+                        magic_number = :magic_number,
+                        last_update = NOW()
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    ':pair' => $trade['pair'],
+                    ':order_type' => $trade['order_type'],
+                    ':volume' => $trade['volume'],
+                    ':open_price' => $trade['open_price'],
+                    ':profit' => $trade['profit'],
+                    ':open_time' => $trade['open_time'],
+                    ':bid_price' => $trade['bid_price'],
+                    ':ask_price' => $trade['ask_price'],
                     ':magic_number' => $trade['magic_number'],
-                    ':pair'         => $trade['pair'],
-                    ':order_type'   => $trade['order_type'],
-                    ':volume'       => $trade['volume'],
-                    ':open_price'   => $trade['open_price'],
-                    ':profit'       => $trade['profit'],
-                    ':open_time'    => $trade['open_time'],
-                    ':bid_price'    => $trade['bid_price'],
-                    ':ask_price'    => $trade['ask_price']
+                    ':id' => $existingTrade['id']
                 ]);
-                logMessage("Processed trade: " . json_encode($trade));
+                logMessage("Updated trade: " . json_encode($trade));
+            } else {
+                // Insert a new trade
+                $stmt = $this->db->prepare("
+                    INSERT INTO trades_open (account_id, ticket, pair, order_type, volume, open_price, profit, open_time, bid_price, ask_price, magic_number, last_update)
+                    VALUES (:account_id, :ticket, :pair, :order_type, :volume, :open_price, :profit, :open_time, :bid_price, :ask_price, :magic_number, NOW())
+                ");
+                $stmt->execute([
+                    ':account_id' => $accountId,
+                    ':ticket' => $trade['ticket'],
+                    ':pair' => $trade['pair'],
+                    ':order_type' => $trade['order_type'],
+                    ':volume' => $trade['volume'],
+                    ':open_price' => $trade['open_price'],
+                    ':profit' => $trade['profit'],
+                    ':open_time' => $trade['open_time'],
+                    ':bid_price' => $trade['bid_price'],
+                    ':ask_price' => $trade['ask_price'],
+                    ':magic_number' => $trade['magic_number']
+                ]);
+                logMessage("Inserted new trade: " . json_encode($trade));
             }
 
-            $this->db->commit();
+            // Sync trades_group and trades_config after processing the trade
+            $this->syncTradesGroup($accountId);
+            $this->syncTradesConfig($accountId);
+
             return true;
 
         } catch (PDOException $e) {
-            $this->db->rollBack();
-            logMessage("Error syncing trades_open: " . $e->getMessage());
+            logMessage("Error syncing trade: " . $e->getMessage());
             return false;
         }
     }
 
     /**
-     * Synchronize trades_group with the latest grouped data from trades_open.
-     * Implements "Found Update, New Insert, Not Found Delete" approach.
+     * Synchronize trades_group table with the latest grouped data.
+     * Implements "Found Update, New Insert, Not Found Delete".
      */
     public function syncTradesGroup($accountId) {
         try {
-            // Fetch existing grouped trades
+            // Fetch existing group keys
             $stmt = $this->db->prepare("SELECT CONCAT_WS('-', magic_number, pair, order_type) AS unique_key FROM trades_group WHERE account_id = :account_id");
             $stmt->execute([':account_id' => $accountId]);
             $existingGroups = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
-            // Calculate new grouped data from trades_open
+            // Calculate new group data from trades_open
             $stmt = $this->db->prepare("
                 SELECT 
                     account_id,
@@ -151,42 +163,48 @@ class TradeModel {
     }
 
     /**
-     * Synchronize trades_config with trades_group.
+     * Synchronize trades_config table with the latest trades_group data.
      */
     public function syncTradesConfig($accountId) {
         try {
-            $this->db->beginTransaction();
-
-            // Fetch grouped trades
-            $stmt = $this->db->prepare("SELECT * FROM trades_group WHERE account_id = :account_id");
+            // Insert or update trades_config entries based on trades_group
+            $stmt = $this->db->prepare("
+                INSERT INTO trades_config (account_id, magic_number, pair, order_type, stop_loss, take_profit, remarks, last_update)
+                SELECT tg.account_id, tg.magic_number, tg.pair, tg.order_type, NULL, NULL, '', NOW()
+                FROM trades_group tg
+                WHERE tg.account_id = :account_id
+                ON DUPLICATE KEY UPDATE
+                    last_update = VALUES(last_update)
+            ");
             $stmt->execute([':account_id' => $accountId]);
-            $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Sync configs
-            foreach ($groups as $group) {
-                $stmtConfig = $this->db->prepare("
-                    INSERT INTO trades_config (account_id, magic_number, pair, order_type, stop_loss, take_profit, remarks, last_update)
-                    VALUES (:account_id, :magic_number, :pair, :order_type, NULL, NULL, '', NOW())
-                    ON DUPLICATE KEY UPDATE
-                        last_update = NOW()
-                ");
-                $stmtConfig->execute([
-                    ':account_id'   => $group['account_id'],
-                    ':magic_number' => $group['magic_number'],
-                    ':pair'         => $group['pair'],
-                    ':order_type'   => $group['order_type']
-                ]);
-                logMessage("Synced config for group: " . json_encode($group));
-            }
-
-            $this->db->commit();
+            logMessage("Trades_config synced successfully for account_id: $accountId");
             return true;
 
         } catch (PDOException $e) {
-            $this->db->rollBack();
             logMessage("Error syncing trades_config: " . $e->getMessage());
             return false;
         }
     }
-}
 
+    public function getGroupedTrades($accountId)
+    {
+        $stmt = $this->db->prepare("
+            SELECT 
+                id,
+                account_id,
+                magic_number,
+                pair,
+                order_type,
+                total_volume,
+                weighted_open_price,
+                profit,
+                last_update
+            FROM trades_group
+            WHERE account_id = :account_id
+        ");
+        $stmt->execute([':account_id' => $accountId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+}
