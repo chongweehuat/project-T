@@ -1,9 +1,62 @@
 <?php
+require_once '/var/www/utils/Logger.php';
+
 class TradeModel {
     private $db;
 
     public function __construct($db) {
         $this->db = $db;
+    }
+
+    /**
+     * Insert a single trade into the trades_open table.
+     *
+     * @param array $trade
+     * @return bool
+     */
+    public function insertTrade($trade) {
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO trades_open (
+                    ticket, account_id, magic_number, pair, order_type, volume,
+                    open_price, profit, open_time, bid_price, ask_price, last_update
+                ) VALUES (
+                    :ticket, :account_id, :magic_number, :pair, :order_type, :volume,
+                    :open_price, :profit, :open_time, :bid_price, :ask_price, NOW()
+                )
+            ");
+            $stmt->execute([
+                ':ticket'       => $trade['ticket'],
+                ':account_id'   => $trade['account_id'],
+                ':magic_number' => $trade['magic_number'],
+                ':pair'         => $trade['pair'],
+                ':order_type'   => $trade['order_type'],
+                ':volume'       => $trade['volume'],
+                ':open_price'   => $trade['open_price'],
+                ':profit'       => $trade['profit'],
+                ':open_time'    => $trade['open_time'],
+                ':bid_price'    => $trade['bid_price'],
+                ':ask_price'    => $trade['ask_price'],
+            ]);
+            return true;
+        } catch (PDOException $e) {
+            logMessage("Insert error: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Delete all trades_open records for the account_id.
+     */
+    public function deleteTradesOpenByAccountId($accountId) {
+        try {
+            $stmt = $this->db->prepare("DELETE FROM trades_open WHERE account_id = :account_id");
+            $stmt->execute([':account_id' => $accountId]);
+            return true;
+        } catch (PDOException $e) {
+            error_log("Error deleting trades_open: " . $e->getMessage());
+            return false;
+        }
     }
 
     /**

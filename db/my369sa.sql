@@ -4,7 +4,7 @@
 -- 
 CREATE TABLE `trades_open` (
   `id` int(11) NOT NULL,
-  `ticket` int(11) NOT NULL,
+  `ticket` bigint(20) NOT NULL,
   `group_id` int(11) DEFAULT NULL,
   `account_id` int(11) NOT NULL,
   `magic_number` int(11) DEFAULT NULL,
@@ -30,7 +30,7 @@ ALTER TABLE trades_open MODIFY order_type ENUM('buy', 'sell') DEFAULT 'buy';
 --
 CREATE TABLE `trades_closed` (
   `id` int(11) NOT NULL,
-  `ticket` int(11) DEFAULT NULL,
+  `ticket` bigint(20) DEFAULT NULL,
   `config_id` int(11) DEFAULT NULL,
   `account_id` int(11) NOT NULL,
   `magic_number` int(11) DEFAULT NULL,
@@ -136,7 +136,7 @@ CREATE TABLE `trades_order` (
   `order_type` enum('buy','sell') DEFAULT NULL,
   `open_price` decimal(15,5) DEFAULT NULL,
   `volume` decimal(15,2) DEFAULT NULL,
-  `ticket` int(11) DEFAULT NULL
+  `ticket` bigint(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_order`
   ADD PRIMARY KEY (`id`),
@@ -155,7 +155,7 @@ CREATE TABLE `trades_order_executed` (
   `order_type` enum('buy','sell') DEFAULT NULL,
   `open_price` decimal(15,5) DEFAULT NULL,
   `volume` decimal(15,2) DEFAULT NULL,
-  `ticket` int(11) DEFAULT NULL,
+  `ticket` bigint(20) DEFAULT NULL,
   `action` enum('open','closed') DEFAULT NULL,
   `execution_time` DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
