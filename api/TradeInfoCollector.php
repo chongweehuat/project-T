@@ -4,7 +4,7 @@ require_once '/var/www/db/database.php';
 require_once '/var/www/models/TradeModel.php';
 require_once '/var/www/utils/Logger.php';
 
-$debug = true; // Enable or disable debug logging
+$debug = false; // Enable or disable debug logging
 
 /**
  * Clean incoming POST data to remove unwanted characters.
