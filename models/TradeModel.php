@@ -1,5 +1,4 @@
 <?php
-
 class TradeModel {
     private $db;
 
@@ -8,108 +7,151 @@ class TradeModel {
     }
 
     /**
-     * Upsert a single trade into the database.
-     * 
-     * @param array $trade The trade data to be upserted.
-     * @return bool True on success, False on failure.
+     * Delete all trades_group records for the account_id.
      */
-    public function upsertTrade($trade) {
+    public function deleteTradesGroupByAccountId($accountId) {
         try {
-            // Prepare the SQL statement for upsert operation
-            $stmt = $this->db->prepare("
-                INSERT INTO trades 
-                (account_id, pair, order_type, volume, profit, open_price, stop_loss, take_profit, open_time, status, magic_number, remarks) 
-                VALUES 
-                (
-                    (SELECT id FROM accounts WHERE login = :account_number), 
-                    :pair, :order_type, :volume, :profit, :open_price, :stop_loss, :take_profit, :open_time, 'open', :magic_number, :remarks
-                )
-                ON DUPLICATE KEY UPDATE
-                    profit = VALUES(profit),
-                    stop_loss = VALUES(stop_loss),
-                    take_profit = VALUES(take_profit),
-                    volume = VALUES(volume),
-                    status = 'open',
-                    remarks = VALUES(remarks)
-            ");
-
-            // Bind parameters and execute the statement
-            $stmt->execute([
-                ':account_number' => $trade['account_number'],
-                ':pair' => $trade['symbol'], // Updated to use 'symbol' instead of 'pair' for consistency
-                ':order_type' => $trade['type'], // 'type' corresponds to the order type
-                ':volume' => $trade['volume'],
-                ':profit' => $trade['profit'],
-                ':open_price' => $trade['open_price'],
-                ':stop_loss' => $trade['stop_loss'],
-                ':take_profit' => $trade['take_profit'],
-                ':open_time' => $trade['open_time'],
-                ':magic_number' => $trade['magic_number'],
-                ':remarks' => $trade['remarks'] ?? null,
-            ]);
-
-            // Return success without logging
+            $stmt = $this->db->prepare("DELETE FROM trades_group WHERE account_id = :account_id");
+            $stmt->execute([':account_id' => $accountId]);
             return true;
         } catch (PDOException $e) {
-            // Suppress logging and return failure
+            error_log("Error deleting trades_group: " . $e->getMessage());
             return false;
         }
     }
 
     /**
-     * Fetch trades for a specific account by login.
-     * 
-     * @param string $accountLogin The login of the account.
-     * @return array The list of trades or an empty array if none found.
+     * Group trades from trades_open into trades_group for the given account_id.
      */
-    public function getTradesByAccount($accountLogin) {
-        $stmt = $this->db->prepare("
-            SELECT 
-                t.id, t.pair, t.order_type, t.volume, t.profit, t.open_price, 
-                t.stop_loss, t.take_profit, t.open_time, t.status, t.magic_number
-            FROM trades t
-            INNER JOIN accounts a ON t.account_id = a.id
-            WHERE a.login = :login
-        ");
-        $stmt->execute([':login' => $accountLogin]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function upsertGroupedTrade($accountNumber, $groupedTrade) {
+    public function groupTradesForAccount($accountId) {
         try {
             $stmt = $this->db->prepare("
-                INSERT INTO aggregated_trades 
-                (account_id, pair, order_type, volume, profit, prorated_open_price, magic_number, trade_count, currency_price) 
-                VALUES 
-                (
-                    (SELECT id FROM accounts WHERE login = :account_number), 
-                    :pair, :order_type, :volume, :profit, :prorated_open_price, :magic_number, :trade_count, :currency_price
+                INSERT INTO trades_group (
+                    account_id, magic_number, pair, order_type, total_volume, weighted_open_price, profit, last_update
                 )
-                ON DUPLICATE KEY UPDATE
-                    volume = VALUES(volume),
-                    profit = VALUES(profit),
-                    prorated_open_price = VALUES(prorated_open_price),
-                    trade_count = VALUES(trade_count),
-                    currency_price = VALUES(currency_price)
+                SELECT 
+                    account_id,
+                    magic_number,
+                    pair,
+                    order_type,
+                    SUM(volume) AS total_volume,
+                    SUM(open_price * volume) / SUM(volume) AS weighted_open_price,
+                    SUM(profit) AS profit,
+                    NOW() AS last_update
+                FROM trades_open
+                WHERE account_id = :account_id
+                GROUP BY account_id, magic_number, pair, order_type
             ");
-    
-            $stmt->execute([
-                ':account_number' => $accountNumber,
-                ':pair' => $groupedTrade['symbol'],
-                ':order_type' => $groupedTrade['type'],
-                ':volume' => $groupedTrade['total_volume'],
-                ':profit' => $groupedTrade['total_profit'],
-                ':prorated_open_price' => $groupedTrade['prorated_open_price'],
-                ':magic_number' => $groupedTrade['magic_number'],
-                ':trade_count' => $groupedTrade['trade_count'],
-                ':currency_price' => $groupedTrade['currency_price'],
-            ]);
-    
+            $stmt->execute([':account_id' => $accountId]);
             return true;
         } catch (PDOException $e) {
+            error_log("Error grouping trades: " . $e->getMessage());
             return false;
         }
     }
-    
+
+    /**
+     * Sync trades_group with trades_config for the given account_id.
+     */
+    public function syncWithTradesConfig($accountId) {
+        try {
+            // Fetch all trades_group records for the account_id
+            $stmt = $this->db->prepare("
+                SELECT account_id, magic_number, pair, order_type FROM trades_group WHERE account_id = :account_id
+            ");
+            $stmt->execute([':account_id' => $accountId]);
+            $tradesGroup = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Fetch all trades_config records for the account_id
+            $stmt = $this->db->prepare("
+                SELECT account_id, magic_number, pair, order_type FROM trades_config WHERE account_id = :account_id
+            ");
+            $stmt->execute([':account_id' => $accountId]);
+            $tradesConfig = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Convert trades_config to a lookup array
+            $configLookup = [];
+            foreach ($tradesConfig as $config) {
+                $key = "{$config['account_id']}_{$config['magic_number']}_{$config['pair']}_{$config['order_type']}";
+                $configLookup[$key] = $config;
+            }
+
+            // Sync logic
+            foreach ($tradesGroup as $group) {
+                $key = "{$group['account_id']}_{$group['magic_number']}_{$group['pair']}_{$group['order_type']}";
+
+                if (!isset($configLookup[$key])) {
+                    // Insert new config if not exists
+                    $this->insertDefaultConfig($group);
+                } else {
+                    // Update config if needed
+                    $this->updateConfig($group, $configLookup[$key]);
+                }
+
+                // Remove from lookup to track stale configs
+                unset($configLookup[$key]);
+            }
+
+            // Remove stale configs
+            foreach ($configLookup as $staleConfig) {
+                $this->archiveConfig($staleConfig);
+            }
+
+            return true;
+        } catch (PDOException $e) {
+            error_log("Error syncing with trades_config: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Insert default config for a new trades_group entry.
+     */
+    private function insertDefaultConfig($group) {
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO trades_config (account_id, magic_number, pair, order_type, stop_loss, take_profit, remarks, last_update)
+                VALUES (:account_id, :magic_number, :pair, :order_type, NULL, NULL, 'Default configuration', NOW())
+            ");
+            $stmt->execute([
+                ':account_id'   => $group['account_id'],
+                ':magic_number' => $group['magic_number'],
+                ':pair'         => $group['pair'],
+                ':order_type'   => $group['order_type'],
+            ]);
+        } catch (PDOException $e) {
+            error_log("Error inserting default config: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update existing config for a trades_group entry.
+     */
+    private function updateConfig($group, $config) {
+        try {
+            // Update logic here if needed, e.g., adjusting stop_loss or take_profit
+        } catch (PDOException $e) {
+            error_log("Error updating config: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Archive stale trades_config entry.
+     */
+    private function archiveConfig($config) {
+        try {
+            $stmt = $this->db->prepare("
+                DELETE FROM trades_config WHERE account_id = :account_id AND magic_number = :magic_number AND pair = :pair AND order_type = :order_type
+            ");
+            $stmt->execute([
+                ':account_id'   => $config['account_id'],
+                ':magic_number' => $config['magic_number'],
+                ':pair'         => $config['pair'],
+                ':order_type'   => $config['order_type'],
+            ]);
+        } catch (PDOException $e) {
+            error_log("Error archiving config: " . $e->getMessage());
+        }
+    }
 }
+?>
