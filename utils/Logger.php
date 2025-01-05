@@ -1,5 +1,5 @@
 <?php
-$debug = true; // Global debug flag
+$debug = false; // Global debug flag
 
 function logMessage($message) {
     global $debug;
