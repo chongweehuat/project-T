@@ -10,95 +10,115 @@ class TradeModel {
     }
 
     /**
-     * Synchronize a single trade into the trades_open table.
-     * Implements "Found Update, New Insert".
+     * Synchronize all trades in the trades_open table for a given account.
+     * Implements "Found Update, New Insert, Not Found Delete".
      */
-    public function syncSingleTrade($accountId, $trade) {
+    public function syncTrades($accountId, $trades) {
         try {
-            // Check if the trade already exists
-            $stmt = $this->db->prepare("SELECT id FROM trades_open WHERE account_id = :account_id AND ticket = :ticket");
-            $stmt->execute([
-                ':account_id' => $accountId,
-                ':ticket' => $trade['ticket']
-            ]);
-            $existingTrade = $stmt->fetch(PDO::FETCH_ASSOC);
+            $this->db->beginTransaction();
 
-            if ($existingTrade) {
-                // Update the existing trade
-                $stmt = $this->db->prepare("
-                    UPDATE trades_open 
-                    SET 
-                        pair = :pair,
-                        order_type = :order_type,
-                        volume = :volume,
-                        open_price = :open_price,
-                        profit = :profit,
-                        open_time = :open_time,
-                        bid_price = :bid_price,
-                        ask_price = :ask_price,
-                        magic_number = :magic_number,
-                        last_update = NOW()
-                    WHERE id = :id
-                ");
-                $stmt->execute([
-                    ':pair' => $trade['pair'],
-                    ':order_type' => $trade['order_type'],
-                    ':volume' => $trade['volume'],
-                    ':open_price' => $trade['open_price'],
-                    ':profit' => $trade['profit'],
-                    ':open_time' => $trade['open_time'],
-                    ':bid_price' => $trade['bid_price'],
-                    ':ask_price' => $trade['ask_price'],
-                    ':magic_number' => $trade['magic_number'],
-                    ':id' => $existingTrade['id']
-                ]);
-                logMessage("Updated trade: " . json_encode($trade));
-            } else {
-                // Insert a new trade
-                $stmt = $this->db->prepare("
-                    INSERT INTO trades_open (account_id, ticket, pair, order_type, volume, open_price, profit, open_time, bid_price, ask_price, magic_number, last_update)
-                    VALUES (:account_id, :ticket, :pair, :order_type, :volume, :open_price, :profit, :open_time, :bid_price, :ask_price, :magic_number, NOW())
-                ");
-                $stmt->execute([
-                    ':account_id' => $accountId,
-                    ':ticket' => $trade['ticket'],
-                    ':pair' => $trade['pair'],
-                    ':order_type' => $trade['order_type'],
-                    ':volume' => $trade['volume'],
-                    ':open_price' => $trade['open_price'],
-                    ':profit' => $trade['profit'],
-                    ':open_time' => $trade['open_time'],
-                    ':bid_price' => $trade['bid_price'],
-                    ':ask_price' => $trade['ask_price'],
-                    ':magic_number' => $trade['magic_number']
-                ]);
-                logMessage("Inserted new trade: " . json_encode($trade));
+            // Parse all trade data and collect tickets for batch operations
+            $parsedTrades = [];
+            $tickets = [];
+            foreach ($trades as $tradeString) {
+                parse_str(str_replace('|', '&', $tradeString), $tradeData);
+                $parsedTrades[] = $tradeData;
+                $tickets[] = $tradeData['ticket'] ?? null;
             }
 
-            // Sync trades_group and trades_config after processing the trade
+            // Insert or update trades in a batch
+            foreach ($parsedTrades as $trade) {
+                $this->upsertTrade($accountId, $trade);
+            }
+
+            // Remove trades that are not in the current batch
+            $this->deleteMissingTrades($accountId, $tickets);
+
+            // Sync trades_group and trades_config after processing the trades
             $this->syncTradesGroup($accountId);
             $this->syncTradesConfig($accountId);
 
+            $this->db->commit();
             return true;
-
-        } catch (PDOException $e) {
-            logMessage("Error syncing trade: " . $e->getMessage());
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            logMessage("Error syncing trades: " . $e->getMessage());
             return false;
         }
     }
 
     /**
+     * Insert or update a single trade.
+     */
+    private function upsertTrade($accountId, $trade) {
+        $query = "
+            INSERT INTO trades_open (
+                account_id, ticket, pair, order_type, volume, profit, 
+                open_price, bid_price, ask_price, open_time, magic_number, last_update
+            ) VALUES (
+                :account_id, :ticket, :pair, :order_type, :volume, :profit,
+                :open_price, :bid_price, :ask_price, :open_time, :magic_number, NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                pair = VALUES(pair),
+                order_type = VALUES(order_type),
+                volume = VALUES(volume),
+                profit = VALUES(profit),
+                open_price = VALUES(open_price),
+                bid_price = VALUES(bid_price),
+                ask_price = VALUES(ask_price),
+                open_time = VALUES(open_time),
+                magic_number = VALUES(magic_number),
+                last_update = NOW()
+        ";
+
+        $stmt = $this->db->prepare($query);
+        $stmt->execute([
+            ':account_id' => $accountId,
+            ':ticket' => $trade['ticket'],
+            ':pair' => $trade['pair'],
+            ':order_type' => $trade['order_type'],
+            ':volume' => $trade['volume'],
+            ':profit' => $trade['profit'],
+            ':open_price' => $trade['open_price'],
+            ':bid_price' => $trade['bid_price'],
+            ':ask_price' => $trade['ask_price'],
+            ':open_time' => $trade['open_time'],
+            ':magic_number' => $trade['magic_number'],
+        ]);
+    }
+
+    /**
+     * Delete trades that are no longer open.
+     */
+    private function deleteMissingTrades($accountId, $tickets) {
+        if (empty($tickets)) {
+            return;
+        }
+
+        $placeholders = rtrim(str_repeat('?,', count($tickets)), ',');
+        $query = "
+            DELETE FROM trades_open
+            WHERE account_id = ? AND ticket NOT IN ($placeholders)
+        ";
+
+        $stmt = $this->db->prepare($query);
+        $stmt->execute(array_merge([$accountId], $tickets));
+    }
+
+    /**
      * Synchronize trades_group table with the latest grouped data.
-     * Implements "Found Update, New Insert, Not Found Delete".
      */
     public function syncTradesGroup($accountId) {
         try {
-            // Fetch existing group keys
-            $stmt = $this->db->prepare("SELECT CONCAT_WS('-', magic_number, pair, order_type) AS unique_key FROM trades_group WHERE account_id = :account_id");
+            $stmt = $this->db->prepare("
+                SELECT CONCAT_WS('-', magic_number, pair, order_type) AS unique_key
+                FROM trades_group
+                WHERE account_id = :account_id
+            ");
             $stmt->execute([':account_id' => $accountId]);
             $existingGroups = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
 
-            // Calculate new group data from trades_open
             $stmt = $this->db->prepare("
                 SELECT 
                     account_id,
@@ -115,25 +135,30 @@ class TradeModel {
             $stmt->execute([':account_id' => $accountId]);
             $newGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Determine groups to delete
             $newKeys = array_map(function ($group) {
                 return $group['magic_number'] . '-' . $group['pair'] . '-' . $group['order_type'];
             }, $newGroups);
 
             $toDelete = array_diff($existingGroups, $newKeys);
 
-            // Delete obsolete groups
             if (!empty($toDelete)) {
                 $placeholders = implode(',', array_fill(0, count($toDelete), '?'));
-                $deleteStmt = $this->db->prepare("DELETE FROM trades_group WHERE account_id = ? AND CONCAT_WS('-', magic_number, pair, order_type) IN ($placeholders)");
+                $deleteStmt = $this->db->prepare("
+                    DELETE FROM trades_group 
+                    WHERE account_id = ? AND CONCAT_WS('-', magic_number, pair, order_type) IN ($placeholders)
+                ");
                 $deleteStmt->execute(array_merge([$accountId], $toDelete));
                 logMessage("Deleted obsolete trades_group entries: " . implode(',', $toDelete));
             }
 
-            // Insert or update grouped trades
             $stmtInsert = $this->db->prepare("
-                INSERT INTO trades_group (account_id, magic_number, pair, order_type, total_volume, weighted_open_price, profit, last_update)
-                VALUES (:account_id, :magic_number, :pair, :order_type, :total_volume, :weighted_open_price, :profit, NOW())
+                INSERT INTO trades_group (
+                    account_id, magic_number, pair, order_type, total_volume, 
+                    weighted_open_price, profit, last_update
+                ) VALUES (
+                    :account_id, :magic_number, :pair, :order_type, :total_volume,
+                    :weighted_open_price, :profit, NOW()
+                )
                 ON DUPLICATE KEY UPDATE
                     total_volume = VALUES(total_volume),
                     weighted_open_price = VALUES(weighted_open_price),
@@ -143,13 +168,13 @@ class TradeModel {
 
             foreach ($newGroups as $group) {
                 $stmtInsert->execute([
-                    ':account_id'         => $group['account_id'],
-                    ':magic_number'       => $group['magic_number'],
-                    ':pair'               => $group['pair'],
-                    ':order_type'         => $group['order_type'],
-                    ':total_volume'       => $group['total_volume'],
+                    ':account_id' => $group['account_id'],
+                    ':magic_number' => $group['magic_number'],
+                    ':pair' => $group['pair'],
+                    ':order_type' => $group['order_type'],
+                    ':total_volume' => $group['total_volume'],
                     ':weighted_open_price' => $group['weighted_open_price'],
-                    ':profit'             => $group['profit']
+                    ':profit' => $group['profit']
                 ]);
                 logMessage("Processed trades_group: " . json_encode($group));
             }
@@ -167,10 +192,13 @@ class TradeModel {
      */
     public function syncTradesConfig($accountId) {
         try {
-            // Insert or update trades_config entries based on trades_group
             $stmt = $this->db->prepare("
-                INSERT INTO trades_config (account_id, magic_number, pair, order_type, stop_loss, take_profit, remarks, last_update)
-                SELECT tg.account_id, tg.magic_number, tg.pair, tg.order_type, NULL, NULL, '', NOW()
+                INSERT INTO trades_config (
+                    account_id, magic_number, pair, order_type, stop_loss, 
+                    take_profit, remarks, last_update
+                ) SELECT 
+                    tg.account_id, tg.magic_number, tg.pair, tg.order_type, 
+                    NULL, NULL, '', NOW()
                 FROM trades_group tg
                 WHERE tg.account_id = :account_id
                 ON DUPLICATE KEY UPDATE

@@ -25,11 +25,22 @@
             color: red;
             font-weight: bold;
         }
+
+        .highlight-update {
+            background-color: yellow;
+            transition: background-color 0.5s ease;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1 class="text-center mt-4">Open Trades Dashboard <?php echo htmlspecialchars($_GET['login'] ?? ''); ?></h1>
+        <div id="loadingSpinner" style="display: none; text-align: center;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <div id="errorMessage" style="display: none; color: red; text-align: center;"></div>
         <div class="table-container">
             <table class="table table-striped table-bordered" id="tradesTable">
                 <thead class="table-dark">
@@ -39,7 +50,6 @@
                         <th>Type</th>
                         <th class="text-end">Total Volume</th>
                         <th class="text-end">Weighted Open Price</th>
-                        <th class="text-end">Current Price</th>
                         <th class="text-end">Profit</th>
                         <th>Last Updated</th>
                     </tr>
@@ -52,37 +62,38 @@
     </div>
 
     <script>
-        // API endpoint to fetch grouped trades
-        const login = "<?php echo htmlspecialchars($_GET['login'] ?? ''); ?>"; // Account login ID
+        const login = "<?php echo htmlspecialchars($_GET['login'] ?? ''); ?>";
         const apiEndpoint = `https://sapi.my369.click/getTrades.php?account_id=${login}`;
-        
 
-        // Function to fetch and render trades data
         async function fetchAndRenderTrades() {
+            const spinner = document.getElementById("loadingSpinner");
+            const errorMessage = document.getElementById("errorMessage");
+            spinner.style.display = "block";
+            errorMessage.style.display = "none";
+
             try {
                 const response = await axios.get(apiEndpoint);
+
+                spinner.style.display = "none";
 
                 if (response.data.status === "success" && response.data.data) {
                     const trades = response.data.data;
                     const tableBody = document.querySelector("#tradesTable tbody");
 
-                    // Clear existing rows
                     tableBody.innerHTML = "";
 
-                    // Populate table with trades data
                     trades.forEach((trade, index) => {
                         const profitClass = parseFloat(trade.profit) >= 0 
                             ? "highlight-positive" 
                             : "highlight-negative";
 
                         const row = `
-                            <tr>
+                            <tr id="trade-${trade.id}" class="highlight-update">
                                 <td>${index + 1}</td>
                                 <td>${trade.pair}</td>
                                 <td>${trade.order_type}</td>
                                 <td class="text-end">${parseFloat(trade.total_volume).toFixed(2)}</td>
                                 <td class="text-end">${parseFloat(trade.weighted_open_price).toFixed(5)}</td>
-                                <td class="text-end">${parseFloat(trade.current_price).toFixed(5)}</td>
                                 <td class="text-end ${profitClass}">${parseFloat(trade.profit).toFixed(2)}</td>
                                 <td>${trade.last_update}</td>
                             </tr>
@@ -91,17 +102,19 @@
                         tableBody.insertAdjacentHTML("beforeend", row);
                     });
                 } else {
-                    console.error("Failed to fetch trades:", response.data.message);
+                    errorMessage.textContent = "Failed to fetch trades: " + response.data.message;
+                    errorMessage.style.display = "block";
                 }
             } catch (error) {
-                console.error("Error fetching trades:", error);
+                spinner.style.display = "none";
+                errorMessage.textContent = "Error fetching trades: " + error.message;
+                errorMessage.style.display = "block";
             }
         }
 
-        // Initialize data fetch and auto-refresh every 10 seconds
         document.addEventListener("DOMContentLoaded", () => {
-            fetchAndRenderTrades(); // Initial fetch
-            setInterval(fetchAndRenderTrades, 10000); // Refresh every 10 seconds
+            fetchAndRenderTrades();
+            setInterval(fetchAndRenderTrades, 10000);
         });
     </script>
 </body>
