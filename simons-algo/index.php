@@ -1,16 +1,16 @@
 <?php
 // Get the 'view' and 'login' parameters from the URL
 $view = $_GET['view'] ?? 'accounts'; // Default to 'accounts' if no view is specified
-$login = $_GET['login'] ?? null; // Optional parameter for account-specific views
+$account_id = $_GET['account_id'] ?? null; // Optional parameter for account-specific views
 
 // Route to the appropriate view
 switch ($view) {
     case 'openTradeDashboard':
         // Include the openTradeDashboard view only if login is provided
-        if ($login) {
+        if ($account_id) {
             include_once './views/openTradeDashboard.php';
         } else {
-            echo "Error: Login parameter is required for the trade dashboard.";
+            echo "Error: account_id parameter is required for the trade dashboard.";
         }
         break;
 

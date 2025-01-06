@@ -12,6 +12,11 @@ class AccountModel {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function getAccountByID($accountId) {
+        $stmt = $this->db->query("SELECT login, account_name AS name, broker_name, balance, equity, free_margin, last_update FROM accounts where login=$accountId");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function upsertAccount($data) {
         $now = date('Y-m-d H:i:s');
 

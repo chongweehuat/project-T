@@ -89,7 +89,7 @@
                         const row = `
                             <tr>
                                 <td>
-                                    <a href="?view=openTradeDashboard&login=${account.login}" target="_blank">
+                                    <a href="?view=openTradeDashboard&account_id=${account.login}" target="_blank">
                                         ${account.login}
                                     </a>
                                 </td>

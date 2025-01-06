@@ -51,13 +51,23 @@ class TradeModel {
      * Insert or update a single trade.
      */
     private function upsertTrade($accountId, $trade) {
+        // Determine the current price based on the order type
+        $currentPrice = null;
+        if ($trade['order_type'] === 'buy') {
+            $currentPrice = $trade['bid_price']; // Use Bid price for Buy trades
+        } elseif ($trade['order_type'] === 'sell') {
+            $currentPrice = $trade['ask_price']; // Use Ask price for Sell trades
+        }
+    
         $query = "
             INSERT INTO trades_open (
-                account_id, ticket, pair, order_type, volume, profit, 
-                open_price, bid_price, ask_price, open_time, magic_number, last_update
+                account_id, ticket, pair, order_type, volume, profit,
+                open_price, bid_price, ask_price, current_price, commission, comment,
+                open_time, magic_number, last_update
             ) VALUES (
                 :account_id, :ticket, :pair, :order_type, :volume, :profit,
-                :open_price, :bid_price, :ask_price, :open_time, :magic_number, NOW()
+                :open_price, :bid_price, :ask_price, :current_price, :commission, :comment,
+                :open_time, :magic_number, NOW()
             )
             ON DUPLICATE KEY UPDATE
                 pair = VALUES(pair),
@@ -67,11 +77,14 @@ class TradeModel {
                 open_price = VALUES(open_price),
                 bid_price = VALUES(bid_price),
                 ask_price = VALUES(ask_price),
+                current_price = VALUES(current_price),
+                commission = VALUES(commission),
+                comment = VALUES(comment),
                 open_time = VALUES(open_time),
                 magic_number = VALUES(magic_number),
                 last_update = NOW()
         ";
-
+    
         $stmt = $this->db->prepare($query);
         $stmt->execute([
             ':account_id' => $accountId,
@@ -83,10 +96,14 @@ class TradeModel {
             ':open_price' => $trade['open_price'],
             ':bid_price' => $trade['bid_price'],
             ':ask_price' => $trade['ask_price'],
+            ':current_price' => $currentPrice, // Pass the calculated current price
+            ':commission' => $trade['commission'], // New field
+            ':comment' => $trade['comment'],       // New field
             ':open_time' => $trade['open_time'],
             ':magic_number' => $trade['magic_number'],
         ]);
     }
+    
 
     /**
      * Delete trades that are no longer open.
@@ -218,17 +235,26 @@ class TradeModel {
     {
         $stmt = $this->db->prepare("
             SELECT 
-                id,
-                account_id,
-                magic_number,
-                pair,
-                order_type,
-                total_volume,
-                weighted_open_price,
-                profit,
-                last_update
-            FROM trades_group
-            WHERE account_id = :account_id
+            tg.id,
+            tg.account_id,
+            tg.magic_number,
+            tg.pair,
+            tg.order_type,
+            tg.total_volume,
+            tg.weighted_open_price,
+            tg.profit,
+            (
+                SELECT tp.current_price 
+                FROM trades_open tp
+                WHERE tp.account_id = tg.account_id
+                AND tp.magic_number = tg.magic_number
+                AND tp.pair = tg.pair
+                AND tp.order_type = tg.order_type
+                LIMIT 1
+            ) AS current_price, 
+            tg.last_update
+        FROM trades_group tg
+        WHERE tg.account_id = :account_id
         ");
         $stmt->execute([':account_id' => $accountId]);
 

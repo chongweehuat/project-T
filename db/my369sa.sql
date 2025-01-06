@@ -13,9 +13,12 @@ CREATE TABLE `trades_open` (
   `volume` decimal(15,2) DEFAULT NULL,
   `open_price` decimal(15,5) DEFAULT NULL,
   `profit` decimal(15,2) DEFAULT NULL,
+  `commission`  decimal(15,2) DEFAULT NULL,
   `open_time` datetime DEFAULT NULL,
   `bid_price` decimal(15,5) DEFAULT NULL,
   `ask_price` decimal(15,5) DEFAULT NULL,
+  `current_price` decimal(15,5) DEFAULT NULL,
+  `comment` varchar(100) DEFAULT NULL,
   `last_update` datetime DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE `trades_open`
