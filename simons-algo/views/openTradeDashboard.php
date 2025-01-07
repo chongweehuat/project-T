@@ -149,8 +149,8 @@
         document.addEventListener("DOMContentLoaded", () => {
             fetchAccountDetails();
             fetchAndRenderTrades();
-            setInterval(fetchAccountDetails, 10000); // Refresh account details every 10 seconds
-            setInterval(fetchAndRenderTrades, 10000); // Refresh trades every 10 seconds
+            setInterval(fetchAccountDetails, 100); // Refresh account details every 10 seconds
+            setInterval(fetchAndRenderTrades, 100); // Refresh trades every 10 seconds
         });
     </script>
 </body>
