@@ -47,7 +47,6 @@
 <body>
     <div class="container">
         <div id="accountDetails" class="account-details">
-            <!-- Account details will be dynamically populated here -->
             <p>Loading account details...</p>
         </div>
 
@@ -60,10 +59,16 @@
                         <th>MG</th>
                         <th>Pair</th>
                         <th>Type</th>
-                        <th>Vol</th>
-                        <th>WOP</th>
-                        <th>Price</th>
-                        <th>Profit</th>
+                        <th class="text-end">Vol</th>
+                        <th class="text-end">WOP</th>
+                        <th class="text-end">Price</th>
+                        <th class="text-end">XP</th>
+                        <th class="text-end">Gap</th>
+                        <th class="text-end">Profit</th>
+                        <th class="text-end">SL</th> <!-- New Column -->
+                        <th class="text-end">TP</th> <!-- New Column -->
+                        <th class="text-end">RRR</th> <!-- New Column -->
+                        <th class="text-end">Drawdown</th> <!-- New Column -->
                         <th>Last Updated</th>
                     </tr>
                 </thead>
@@ -79,6 +84,11 @@
         const accountEndpoint = `https://sapi.my369.click/getAccountByID.php?account_id=${account_id}`;
         const tradesEndpoint = `https://sapi.my369.click/getTrades.php?account_id=${account_id}`;
 
+        function formatByPointValue(value, pointValue) {
+            const decimals = pointValue ? Math.max(0, Math.floor(-Math.log10(parseFloat(pointValue)))) : 5;
+            return parseFloat(value).toFixed(decimals);
+        }
+
         async function fetchAccountDetails() {
             const accountDetailsDiv = document.getElementById("accountDetails");
             try {
@@ -88,7 +98,7 @@
                     accountDetailsDiv.innerHTML = `
                         <div>${account.name}</div>
                         <div>${account.broker_name}</div>
-                        <div> ${account_id}</div>
+                        <div>${account_id}</div>
                         <div>BAL: ${parseFloat(account.balance).toFixed(2)}</div>
                         <div>EQT: ${parseFloat(account.equity).toFixed(2)}</div>
                         <div>FM: ${parseFloat(account.free_margin).toFixed(2)}</div>
@@ -111,8 +121,10 @@
 
                 if (response.data.status === "success" && response.data.data) {
                     const trades = response.data.data;
-                    const tableBody = document.querySelector("#tradesTable tbody");
+                    const account = await axios.get(accountEndpoint); // Fetch account details to get balance
+                    const accountBalance = parseFloat(account.data.data[0].balance);
 
+                    const tableBody = document.querySelector("#tradesTable tbody");
                     tableBody.innerHTML = "";
 
                     trades.forEach((trade, index) => {
@@ -120,22 +132,52 @@
                             ? "highlight-positive" 
                             : "highlight-negative";
 
+                        const gap = trade.extreme_price !== null && trade.current_price !== null
+                            ? Math.round((parseFloat(trade.current_price) - parseFloat(trade.extreme_price)) / parseFloat(trade.point_value))
+                            : 'N/A';
+
+                        const rrr = trade.take_profit && trade.stop_loss
+                            ? Math.abs(((parseFloat(trade.take_profit) - parseFloat(trade.weighted_open_price)) / (parseFloat(trade.weighted_open_price) - parseFloat(trade.stop_loss)))).toFixed(1)
+                            : 'N/A';
+
+                        const drawdown = trade.stop_loss
+                            ? (
+                                Math.abs(
+                                    (
+                                        ((parseFloat(trade.weighted_open_price) - parseFloat(trade.stop_loss)) / parseFloat(trade.point_value)) * 
+                                        parseFloat(trade.total_volume)
+                                    ) / accountBalance * 1000
+                                )
+                            ).toFixed(2) + "%"
+                            : 'N/A';
+
                         const row = `
                             <tr id="trade-${trade.id}" class="highlight-update">
                                 <td>${index + 1}</td>
                                 <td>${trade.magic_number || "-"}</td>
-                                <td>${trade.pair}</td>
+                                <td>
+                                    <a href="https://sa.my369.click?view=openTradesListing&group_id=${trade.group_id}" target="_blank">
+                                        ${trade.pair}
+                                    </a>
+                                </td>
                                 <td>${trade.order_type}</td>
-                                <td class="text-end">${parseFloat(trade.total_volume).toFixed(2)}</td>
-                                <td class="text-end">${parseFloat(trade.weighted_open_price).toFixed(5)}</td>
-                                <td class="text-end">${parseFloat(trade.current_price).toFixed(5)}</td>
-                                <td class="text-end ${profitClass}">${parseFloat(trade.profit).toFixed(2)}</td>
+                                <td class="text-end">${parseFloat(trade.total_volume).toFixed(2)}</td> <!-- Vol: 2 decimal -->
+                                <td class="text-end">${formatByPointValue(trade.weighted_open_price, trade.point_value)}</td>
+                                <td class="text-end">${formatByPointValue(trade.current_price, trade.point_value)}</td>
+                                <td class="text-end">${trade.extreme_price !== null ? formatByPointValue(trade.extreme_price, trade.point_value) : '-'}</td>
+                                <td class="text-end">${gap}</td> <!-- Gap: integer -->
+                                <td class="text-end ${profitClass}">${parseFloat(trade.profit).toFixed(2)}</td> <!-- Profit: 2 decimal -->
+                                <td class="text-end">${trade.stop_loss ? formatByPointValue(trade.stop_loss, trade.point_value) : '-'}</td>
+                                <td class="text-end">${trade.take_profit ? formatByPointValue(trade.take_profit, trade.point_value) : '-'}</td>
+                                <td class="text-end">${rrr}</td> <!-- RRR: 1 decimal -->
+                                <td class="text-end">${drawdown}</td>
                                 <td>${trade.last_update}</td>
                             </tr>
                         `;
 
                         tableBody.insertAdjacentHTML("beforeend", row);
                     });
+
                 } else {
                     errorMessage.textContent = "Failed to fetch trades: " + response.data.message;
                     errorMessage.style.display = "block";
@@ -146,11 +188,14 @@
             }
         }
 
+
+
+
         document.addEventListener("DOMContentLoaded", () => {
             fetchAccountDetails();
             fetchAndRenderTrades();
-            setInterval(fetchAccountDetails, 100); // Refresh account details every 10 seconds
-            setInterval(fetchAndRenderTrades, 100); // Refresh trades every 10 seconds
+            setInterval(fetchAccountDetails, 10000); // Refresh account details every 10 seconds
+            setInterval(fetchAndRenderTrades, 10000); // Refresh trades every 10 seconds
         });
     </script>
 </body>
