@@ -1,0 +1,8 @@
+[2025-01-13 16:29:02] array (
+  'account_id' => '18453811',
+  'magic_number' => '0',
+  'pair' => 'EURNZD',
+  'order_type' => 'sell',
+)
+[2025-01-13 16:29:02] Authorization request received: account_id=18453811, magic_number=0, pair=EURNZD, order_type=sell
+[2025-01-13 16:29:02] Authorization granted for account_id=18453811, magic_number=0.
