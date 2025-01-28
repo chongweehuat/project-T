@@ -6,9 +6,9 @@ $group_id = $_GET['group_id'] ?? null; // Optional parameter for group-specific 
 
 // Route to the appropriate view
 switch ($view) {
-    case 'openTradeDashboard':
+    case 'tradeManager':
         if ($account_id) {
-            include_once './views/openTradeDashboard.php';
+            include_once './views/tradeManager.php';
         } else {
             echo "Error: account_id parameter is required for the trade dashboard.";
         }

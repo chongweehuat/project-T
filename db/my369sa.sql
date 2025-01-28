@@ -112,23 +112,27 @@ ALTER TABLE `trades_group`
 -- Will implement trailing stop
 --
 CREATE TABLE `trades_config` (
-  `id` INT(11) NOT NULL AUTO_INCREMENT COMMENT 'Primary key for the trades_config table',
-  `group_id` INT(11) DEFAULT NULL COMMENT 'Reference to the trades_group table for grouping trades',
-  `account_id` INT(11) NOT NULL COMMENT 'ID of the account to which this trade configuration belongs',
-  `magic_number` INT(11) DEFAULT NULL COMMENT 'Unique identifier for strategies or trade groups',
-  `pair` VARCHAR(20) NOT NULL COMMENT 'Currency pair (e.g., EUR/USD)',
-  `order_type` ENUM('buy','sell') DEFAULT NULL COMMENT 'Type of order: buy or sell',
-  `stop_loss` DECIMAL(15,5) DEFAULT NULL COMMENT 'Stop-loss price for the trade',
-  `take_profit` DECIMAL(15,5) DEFAULT NULL COMMENT 'Take-profit price for the trade',
-  `remark` VARCHAR(300) DEFAULT NULL COMMENT 'Optional remarks or notes about the trade configuration',
-  `is_authorized` tinyint(1) DEFAULT '0' COMMENT 'Authorization status (1=authorized, 0=denied)',
-  `last_update` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the last update to this record',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_trade_config` (`account_id`, `magic_number`, `pair`, `order_type`),
-  KEY `idx_group_id` (`group_id`),
-  KEY `idx_account_id` (`account_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Stores trade-specific configurations such as stop-loss and take-profit levels';
-
+  `id` int(11) NOT NULL,
+  `group_id` int(11) DEFAULT NULL,
+  `account_id` int(11) NOT NULL,
+  `magic_number` int(11) DEFAULT NULL,
+  `pair` varchar(20) NOT NULL,
+  `order_type` enum('buy','sell') DEFAULT NULL,
+  `stop_loss` decimal(15,5) DEFAULT NULL,
+  `take_profit` decimal(15,5) DEFAULT NULL,
+  `remark` varchar(300) DEFAULT NULL,
+  `last_update` datetime DEFAULT CURRENT_TIMESTAMP,
+  `auth_FT` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'First Trade Authorization',
+  `auth_AT` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Add Trade Authorization',
+  `auth_CP` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Close Profit Authorization',
+  `auth_SL` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Stop Loss Authorization',
+  `auth_CL` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Close All Authorization'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE `trades_config`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_trade` (`account_id`,`magic_number`,`pair`,`order_type`),
+  ADD KEY `idx_group_id` (`group_id`);
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 --
 -- Similar to trades_config, but for closed trades.
 -- Separate table for easy archived

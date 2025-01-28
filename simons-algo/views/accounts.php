@@ -36,6 +36,7 @@
                         <th>Equity</th>
                         <th>Free Margin</th>
                         <th>Risk Status</th>
+                        <th>Remark</th>
                         <th>Last Update</th>
                     </tr>
                 </thead>
@@ -89,7 +90,7 @@
                         const row = `
                             <tr>
                                 <td>
-                                    <a href="?view=openTradeDashboard&account_id=${account.login}" target="_blank">
+                                    <a href="?view=tradeManager&account_id=${account.login}" target="_blank">
                                         ${account.login}
                                     </a>
                                 </td>
@@ -99,6 +100,7 @@
                                 <td>${equity.toFixed(2)}</td>
                                 <td>${freeMargin.toFixed(2)}</td>
                                 <td class="${riskClass}">${riskStatus}</td>
+                                <td>${account.remark}</td>
                                 <td>${account.last_update}</td>
                             </tr>
                         `;

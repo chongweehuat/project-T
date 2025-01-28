@@ -8,7 +8,7 @@ class AccountModel {
     }
 
     public function getAllAccounts() {
-        $stmt = $this->db->query("SELECT login, account_name AS name, broker_name, balance, equity, free_margin, last_update FROM accounts");
+        $stmt = $this->db->query("SELECT login, account_name AS name, broker_name, balance, equity, free_margin,remark, last_update FROM accounts");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -36,6 +36,7 @@ class AccountModel {
                     balance = :balance,
                     equity = :equity,
                     free_margin = :free_margin,
+                    remark = :ea_version,
                     last_update = :last_update
                 WHERE login = :login
             ");
@@ -46,6 +47,7 @@ class AccountModel {
                 ':balance' => $data['balance'],
                 ':equity' => $data['equity'],
                 ':free_margin' => $data['free_margin'],
+                ':ea_version' => $data['ea_version'],
                 ':last_update' => $now,
                 ':login' => $data['account_number']
             ]);
