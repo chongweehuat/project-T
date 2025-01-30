@@ -103,8 +103,6 @@ class TradesConfigModel
                 tg.id AS group_id,
                 tg.total_volume,
                 tg.weighted_open_price,
-                tg.weighted_stop_loss,
-                tg.weighted_take_profit,
                 tg.profit,
                 tg.last_update,
                 pc.point_value,
@@ -163,8 +161,6 @@ class TradesConfigModel
                 NULL AS group_id,
                 NULL AS total_volume,
                 NULL AS weighted_open_price,
-                NULL AS weighted_stop_loss,
-                NULL AS weighted_take_profit,
                 NULL AS extreme_open_price,
                 NULL AS current_price,
                 NULL AS profit
