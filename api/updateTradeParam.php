@@ -1,6 +1,7 @@
 <?php
 require_once '/var/www/db/database.php'; // Adjust the path as necessary
 require_once '/var/www/models/TradesConfigModel.php';
+require_once '/var/www/utils/Logger.php';
 
 header('Access-Control-Allow-Origin: https://sa.my369.click');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -44,7 +45,7 @@ try {
 
     $db = Database::connect("trade"); // Database connection
     $tradeConfigModel = new TradesConfigModel($db);
-
+logMessage("updateTradeParam: $configId, $groupId, $param, $value\n");
     // Use upsertTradeParam for both cases
     $updated = $tradeConfigModel->upsertTradeParam($configId, $groupId, $param, $value);
 

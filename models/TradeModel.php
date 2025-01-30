@@ -51,14 +51,7 @@ class TradeModel {
      * Insert or update a single trade.
      */
     private function upsertTrade($accountId, $trade) {
-        // Determine the current price based on the order type
-        $currentPrice = null;
-        if ($trade['order_type'] === 'buy') {
-            $currentPrice = $trade['bid_price']; // Use Bid price for Buy trades
-        } elseif ($trade['order_type'] === 'sell') {
-            $currentPrice = $trade['ask_price']; // Use Ask price for Sell trades
-        }
-    
+        
         $query = "
             INSERT INTO trades_open (
                 account_id, ticket, pair, order_type, volume, profit,
@@ -96,7 +89,7 @@ class TradeModel {
             ':open_price' => $trade['open_price'],
             ':bid_price' => $trade['bid_price'],
             ':ask_price' => $trade['ask_price'],
-            ':current_price' => $currentPrice, // Pass the calculated current price
+            ':current_price' => $trade['current_price'], 
             ':commission' => $trade['commission'], // New field
             ':comment' => $trade['comment'],       // New field
             ':open_time' => $trade['open_time'],
@@ -243,7 +236,7 @@ class TradeModel {
             $stmt = $this->db->prepare("
                 INSERT INTO trades_config (
                     group_id, account_id, magic_number, pair, order_type, 
-                    stop_loss, take_profit, remarks, last_update
+                    stop_loss, take_profit, remark, last_update
                 ) 
                 SELECT 
                     tg.id AS group_id,                -- Fetch group_id from trades_group
@@ -253,7 +246,7 @@ class TradeModel {
                     tg.order_type, 
                     NULL AS stop_loss,                -- Default NULL for stop_loss
                     NULL AS take_profit,              -- Default NULL for take_profit
-                    '' AS remarks,                    -- Default empty string for remarks
+                    '' AS remark,                    -- Default empty string for remark
                     NOW() AS last_update
                 FROM trades_group tg
                 WHERE tg.account_id = :account_id

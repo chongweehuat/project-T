@@ -10,7 +10,7 @@
         .container { max-width: 95%; margin: 20px auto; }
         .account-details { margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: #f8f9fa; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
         .text-end { text-align: right; }
-        .highlight-positive { color: green; font-weight: bold; }
+        .highlight-positive { color: green !important; font-weight: bold; }
         .highlight-negative { color: red !important; font-weight: bold; }
         .editable { cursor: pointer; text-decoration: underline; color: blue; }
         .table-container { margin-top: 10px; }
@@ -37,6 +37,7 @@
                         <th rowspan="2" class="text-end">Lot</th>
                         <th rowspan="2" class="text-end">Profit</th>
                         <th colspan="2" class="text-center">Risk</th>
+                        <th rowspan="2" class="text-end">Pips</th>
                         <th rowspan="2" class="text-end">Stop Loss</th>
                         <th rowspan="2" class="text-end">Take Profit</th>
                         <th rowspan="2">Last Updated</th>
@@ -47,8 +48,8 @@
                         <th>CP</th>
                         <th>SL</th>
                         <th>CL</th>
-                        <th class="text-end">Drawdown %</th>
-                        <th class="text-end">Risk ($)</th>
+                        <th class="text-end">DD %</th>
+                        <th class="text-end">Risk %</th>
                     </tr>
                 </thead>
                 <tbody id="combinedTableBody">
@@ -102,25 +103,57 @@
                 const data = response.data.data || [];
                 const tableBody = document.getElementById("combinedTableBody");
                 const peakEquityElement = document.getElementById("peakEquity");
-                const peakEquity = peakEquityElement
-                    ? parseFloat(peakEquityElement.textContent.split(":")[1]) || 0
-                    : 0;
+                const currentEquity = peakEquityElement
+                        ? parseFloat(peakEquityElement.textContent.split(":")[1].replace(/,/g, '')) || 0
+                        : 0;
 
                 tableBody.innerHTML = "";
 
                 data.forEach((entry, index) => {
-                    const lotSize = parseFloat(entry.lot_size || 0);
+                    const lotSize = parseFloat(entry.total_volume || 0);
+                    const extreme_open_price = parseFloat(entry.extreme_open_price || 0);
+                    const current_price = parseFloat(entry.current_price || 0);
                     const stopLoss = parseFloat(entry.stop_loss || 0);
-                    const takeProfit = parseFloat(entry.take_profit || 0);
+                    const weighted_open_price = parseFloat(entry.weighted_open_price || 0);
+                    const pointValue = parseFloat(entry.point_value || 1); // Default point value
                     const profit = parseFloat(entry.profit ?? 0);
                     const remark = entry.remark ?? "N/A";
 
                     let drawdown = "N/A";
                     let risk = "N/A";
+                    let pips = "N/A";
 
-                    if (peakEquity > 0) {
-                        const currentEquity = peakEquity + profit;
-                        drawdown = (((peakEquity - currentEquity) / peakEquity) * 100).toFixed(2);
+                    // Drawdown Calculation
+                    if (currentEquity > 0) {
+                        const currentLoss = -profit; // Current loss is negative profit
+                        drawdown = ((currentLoss / currentEquity) * 100).toFixed(2);
+                                                
+                        // Mark for risk control if drawdown exceeds 5%
+                        if (parseFloat(drawdown) > 5) {
+                            drawdown = `<span class="highlight-negative">${drawdown}</span>`;
+                        }
+                    }
+
+                    
+                    // Risk Calculation
+                    if (lotSize > 0 && pointValue > 0 && stopLoss > 0 && weighted_open_price > 0) {
+                        const pips = 10*Math.abs(weighted_open_price - stopLoss) / pointValue;
+                        const riskValue = (lotSize * pips) / currentEquity;
+                        risk = (riskValue * 100).toFixed(2);
+                          
+                        // Mark for risk control if risk exceeds 10%
+                        if (parseFloat(risk) > 10) {
+                            risk = `<span class="highlight-negative">${risk}</span>`;
+                        }
+                    }
+
+                    // Calculate Pips for re-entry trade
+                    if (extreme_open_price > 0 && current_price > 0) {
+                        if (entry.order_type === "sell") {
+                            pips = ((current_price - extreme_open_price) * 10 / pointValue).toFixed(0);
+                        } else if (entry.order_type === "buy") {
+                            pips = ((extreme_open_price - current_price) * 10 / pointValue).toFixed(0);
+                        }
                     }
 
                     const row = `
@@ -128,7 +161,7 @@
                             <td>${index + 1}</td>
                             <td>${entry.magic_number}</td>
                             <td>${entry.pair}</td>
-                            <td>${entry.order_type}</td>
+                            <td>${entry.order_type || "N/A"}</td>
                             <td>${remark}</td>
                             <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="auth_FT">${entry.auth_FT ? "Y" : "N"}</td>
                             <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="auth_AT">${entry.auth_AT ? "Y" : "N"}</td>
@@ -139,8 +172,9 @@
                             <td class="text-end ${profit >= 0 ? "highlight-positive" : "highlight-negative"}">${profit.toFixed(2)}</td>
                             <td class="text-end">${drawdown}</td>
                             <td class="text-end">${risk}</td>
-                            <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="stop_loss">${stopLoss.toFixed(5)}</td>
-                            <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="take_profit">${takeProfit.toFixed(5)}</td>
+                            <td class="text-end ${pips <0 ? "highlight-positive" : "highlight-negative"}">${pips}</td>
+                            <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="stop_loss" style="text-align: right;">${stopLoss.toFixed(5)}</td>
+                            <td class="editable" data-id="${entry.config_id}" data-groupid="${entry.group_id}" data-param="take_profit" style="text-align: right;">${parseFloat(entry.take_profit || 0).toFixed(5)}</td>
                             <td>${entry.last_update || "N/A"}</td>
                         </tr>
                     `;
@@ -152,6 +186,8 @@
                 console.error("Error fetching combined data:", error);
             }
         }
+
+
 
         function enableInlineEditing() {
             const editableElements = document.querySelectorAll(".editable");

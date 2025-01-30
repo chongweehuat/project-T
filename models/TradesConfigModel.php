@@ -103,15 +103,34 @@ class TradesConfigModel
                 tg.id AS group_id,
                 tg.total_volume,
                 tg.weighted_open_price,
-                COALESCE(tg.weighted_stop_loss, tc.stop_loss) AS effective_stop_loss,
+                tg.weighted_stop_loss,
                 tg.weighted_take_profit,
                 tg.profit,
                 tg.last_update,
-                pc.point_value
+                pc.point_value,
+                CASE 
+                    WHEN tg.order_type = 'sell' THEN (
+                        SELECT MAX(tp.open_price)
+                        FROM trades_open tp
+                        WHERE tp.group_id = tg.id
+                    )
+                    WHEN tg.order_type = 'buy' THEN (
+                        SELECT MIN(tp.open_price)
+                        FROM trades_open tp
+                        WHERE tp.group_id = tg.id
+                    )
+                    ELSE NULL
+                END AS extreme_open_price,
+                (
+                    SELECT MAX(tp.current_price)
+                    FROM trades_open tp
+                    WHERE tp.group_id = tg.id
+                ) AS current_price
             FROM trades_group tg
             LEFT JOIN trades_config tc ON tg.id = tc.group_id
             LEFT JOIN pair_config pc ON tg.pair = pc.pair
             WHERE tg.account_id = ?
+
         ";
         try {
             $stmt = $this->db->prepare($query);
@@ -146,6 +165,8 @@ class TradesConfigModel
                 NULL AS weighted_open_price,
                 NULL AS weighted_stop_loss,
                 NULL AS weighted_take_profit,
+                NULL AS extreme_open_price,
+                NULL AS current_price,
                 NULL AS profit
             FROM trades_config tc
             LEFT JOIN pair_config pc ON tc.pair = pc.pair
@@ -209,6 +230,7 @@ class TradesConfigModel
     {
         
         try {
+            
             // Ensure configId is treated as null if it's the string 'null'
             if ($configId === 'null' || $configId === null || $configId === '') {
                 $configId = null;
@@ -233,7 +255,7 @@ class TradesConfigModel
                 $stmt = $this->db->prepare($query);
                 $stmt->bindParam(':group_id', $groupId, PDO::PARAM_INT);
             }
-
+            
             // Bind the value for both cases
             $stmt->bindParam(':value', $value);
             $stmt->execute();
