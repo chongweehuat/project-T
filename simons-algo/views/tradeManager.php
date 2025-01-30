@@ -80,12 +80,14 @@
                 const response = await axios.get(accountEndpoint);
                 if (response.data.status === "success" && response.data.data.length > 0) {
                     const account = response.data.data[0];
+                    const acfloat = account.equity-account.balance;
                     accountDetailsDiv.innerHTML = `
                         <div>${account.name}</div>
                         <div>${account.broker_name}</div>
                         <div>${account_id}</div>
+                        <div>BAL: ${formatNumber(account.balance, 2)}</div>
                         <div id="peakEquity">Peak Equity: ${formatNumber(account.equity, 2)}</div>
-                        <div>EQT: ${formatNumber(account.equity, 2)}</div>
+                        <div>Float: ${formatNumber(acfloat, 2)} (${formatNumber(100*acfloat/account.equity, 2)}%)</div>
                         <div>FM: ${formatNumber(account.free_margin, 2)}</div>
                         <div>${account.last_update}</div>
                     `;
@@ -228,6 +230,7 @@
         document.addEventListener("DOMContentLoaded", () => {
             fetchAccountDetails();
             fetchCombinedData();
+            setInterval(fetchAccountDetails, 30000); // Refresh account details every 30 seconds
             setInterval(fetchCombinedData, 10000); // Refresh combined data every 10 seconds
         });
     </script>
