@@ -18,14 +18,8 @@ try {
 
     $accountId = intval($_GET['account_id'] ?? 0);
 
-    // Fetch trades_config with group_id
-    $configsWithGroup = $configModel->getConfigsWithGroup($accountId);
-
-    // Fetch trades_config without group_id
-    $configsWithoutGroup = $configModel->getConfigsWithoutGroup($accountId);
-
     // Combine and sort data
-    $combinedData = array_merge($configsWithGroup, $configsWithoutGroup);
+    $combinedData = $configModel->getAllConfigs($accountId);
     usort($combinedData, function ($a, $b) {
         return $a['magic_number'] <=> $b['magic_number']
             ?: $a['pair'] <=> $b['pair']

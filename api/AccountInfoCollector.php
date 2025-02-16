@@ -27,6 +27,8 @@ $data = [
     'balance' => isset($_POST['balance']) ? floatval($_POST['balance']) : null,
     'equity' => isset($_POST['equity']) ? floatval($_POST['equity']) : null,
     'free_margin' => isset($_POST['free_margin']) ? floatval($_POST['free_margin']) : null,
+    'open_count' => isset($_POST['open_count']) ? intval($_POST['open_count']) : null,
+    'total_volume' => isset($_POST['total_volume']) ? floatval($_POST['total_volume']) : null,
 ];
 
 // Validate required data
@@ -37,7 +39,9 @@ if (
     $data['leverage'] === null || 
     $data['balance'] === null || 
     $data['equity'] === null || 
-    $data['free_margin'] === null
+    $data['free_margin'] === null ||
+    $data['open_count'] === null ||
+    $data['total_volume'] === null
 ) {
     http_response_code(400); // Bad Request
     $errorMessage = "Invalid or missing data.";

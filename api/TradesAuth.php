@@ -4,6 +4,8 @@ require_once '/var/www/models/TradesConfigModel.php';
 
 header("Content-Type: application/json; charset=UTF-8");
 
+$debug = true;
+
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(405);
@@ -22,7 +24,7 @@ try {
     $tradesConfigModel = new TradesConfigModel($db);
 
     // 更新 remark
-    $tradesConfigModel->updateRemark($accountId, $magicNumber, $remark);
+    $tradesConfigModel->updateRemark($accountId, $magicNumber, $pair, $orderType, $remark);
 
     // 获取授权配置
     $authConfig = $tradesConfigModel->getAuthorizationConfig($accountId, $magicNumber, $pair, $orderType);

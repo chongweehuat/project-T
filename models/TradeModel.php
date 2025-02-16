@@ -90,8 +90,8 @@ class TradeModel {
             ':bid_price' => $trade['bid_price'],
             ':ask_price' => $trade['ask_price'],
             ':current_price' => $trade['current_price'], 
-            ':commission' => $trade['commission'], // New field
-            ':comment' => $trade['comment'],       // New field
+            ':commission' => $trade['commission'],
+            ':comment' => $trade['comment'],
             ':open_time' => $trade['open_time'],
             ':magic_number' => $trade['magic_number'],
         ]);
@@ -116,108 +116,28 @@ class TradeModel {
         $stmt->execute(array_merge([$accountId], $tickets));
     }
 
+    /**
+     * Synchronize trades_group without using group_id, relying on composite keys.
+     */
     public function syncTradesGroup($accountId) {
         try {
-            // Step 1: Fetch existing group keys
-            $stmt = $this->db->prepare("
-                SELECT id, CONCAT_WS('-', magic_number, pair, order_type) AS unique_key
-                FROM trades_group
-                WHERE account_id = :account_id
-            ");
-            $stmt->execute([':account_id' => $accountId]);
-            $existingGroups = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    
-            logMessage("Existing groups: " . json_encode($existingGroups));
-    
-            // Step 2: Recalculate group data from trades_open
-            $stmt = $this->db->prepare("
-                SELECT 
-                    account_id,
-                    magic_number,
-                    pair,
-                    order_type,
-                    SUM(volume) AS total_volume,
-                    SUM(open_price * volume) / SUM(volume) AS weighted_open_price,
-                    SUM(profit) AS profit
-                FROM trades_open
-                WHERE account_id = :account_id
-                GROUP BY magic_number, pair, order_type
-            ");
-            $stmt->execute([':account_id' => $accountId]);
-            $newGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-            logMessage("Recalculated groups: " . json_encode($newGroups));
-    
-            // Step 3: Update trades_group table
-            $stmtInsert = $this->db->prepare("
-                INSERT INTO trades_group (
-                    account_id, magic_number, pair, order_type, total_volume, 
-                    weighted_open_price, profit, last_update
-                ) VALUES (
-                    :account_id, :magic_number, :pair, :order_type, :total_volume,
-                    :weighted_open_price, :profit, NOW()
-                )
-                ON DUPLICATE KEY UPDATE
-                    total_volume = VALUES(total_volume),
-                    weighted_open_price = VALUES(weighted_open_price),
-                    profit = VALUES(profit),
-                    last_update = NOW()
-            ");
-    
-            foreach ($newGroups as $group) {
-                $stmtInsert->execute([
-                    ':account_id' => $group['account_id'],
-                    ':magic_number' => $group['magic_number'],
-                    ':pair' => $group['pair'],
-                    ':order_type' => $group['order_type'],
-                    ':total_volume' => $group['total_volume'],
-                    ':weighted_open_price' => $group['weighted_open_price'],
-                    ':profit' => $group['profit']
-                ]);
-            }
-    
-            // Step 4: Fetch updated group IDs
-            $stmt = $this->db->prepare("
-                SELECT id, CONCAT_WS('-', magic_number, pair, order_type) AS unique_key
-                FROM trades_group
-                WHERE account_id = :account_id
-            ");
-            $stmt->execute([':account_id' => $accountId]);
-            $updatedGroups = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    
-            logMessage("Updated groups: " . json_encode($updatedGroups));
-    
-            // Step 5: Update group_id in trades_open
-            $stmtUpdateGroupId = $this->db->prepare("
-                UPDATE trades_open
-                SET group_id = (
-                    SELECT id FROM trades_group
-                    WHERE trades_group.account_id = trades_open.account_id
-                    AND trades_group.magic_number = trades_open.magic_number
-                    AND trades_group.pair = trades_open.pair
-                    AND trades_group.order_type = trades_open.order_type
-                )
-                WHERE account_id = :account_id
-            ");
-            $stmtUpdateGroupId->execute([':account_id' => $accountId]);
-    
-            // Step 6: Cleanup trades_group for pairs no longer in trades_open
-            $stmtCleanup = $this->db->prepare("
-                DELETE FROM trades_group
-                WHERE account_id = :account_id
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM trades_open 
-                    WHERE trades_group.account_id = trades_open.account_id
-                    AND trades_group.magic_number = trades_open.magic_number
-                    AND trades_group.pair = trades_open.pair
-                    AND trades_group.order_type = trades_open.order_type
-                )
-            ");
-            $stmtCleanup->execute([':account_id' => $accountId]);
-    
-            logMessage("Trades_group synchronized successfully for account_id: $accountId");
-    
+            $stmt = $this->db->prepare("DELETE FROM trades_group WHERE account_id = ?");
+            $stmt->execute([$accountId]);
+
+            $stmtInsert = $this->db->prepare("INSERT INTO trades_group (
+                account_id, magic_number, pair, order_type, total_volume,
+                weighted_open_price, profit, last_update
+            ) SELECT
+                account_id, magic_number, pair, order_type,
+                SUM(volume) AS total_volume,
+                SUM(open_price * volume) / SUM(volume) AS weighted_open_price,
+                SUM(profit) AS profit,
+                NOW()
+            FROM trades_open
+            WHERE account_id = ?
+            GROUP BY account_id, magic_number, pair, order_type");
+
+            $stmtInsert->execute([$accountId]);
             return true;
         } catch (PDOException $e) {
             logMessage("Error syncing trades_group: " . $e->getMessage());
@@ -228,36 +148,21 @@ class TradeModel {
 
 
     /**
-     * Synchronize trades_config table with the latest trades_group data.
+     * Synchronize trades_config without using group_id.
      */
     public function syncTradesConfig($accountId) {
         try {
-            // Insert or update trades_config with group_id
-            $stmt = $this->db->prepare("
-                INSERT INTO trades_config (
-                    group_id, account_id, magic_number, pair, order_type, 
-                    stop_loss, take_profit, remark, last_update
-                ) 
-                SELECT 
-                    tg.id AS group_id,                -- Fetch group_id from trades_group
-                    tg.account_id, 
-                    tg.magic_number, 
-                    tg.pair, 
-                    tg.order_type, 
-                    NULL AS stop_loss,                -- Default NULL for stop_loss
-                    NULL AS take_profit,              -- Default NULL for take_profit
-                    '' AS remark,                    -- Default empty string for remark
-                    NOW() AS last_update
-                FROM trades_group tg
-                WHERE tg.account_id = :account_id
-                ON DUPLICATE KEY UPDATE
-                    last_update = VALUES(last_update)
-            ");
-            $stmt->execute([':account_id' => $accountId]);
-            
-            logMessage("Trades_config synced successfully for account_id: $accountId");
+            $stmt = $this->db->prepare("INSERT INTO trades_config (
+                account_id, magic_number, pair, order_type, stop_loss, take_profit, remark, last_update
+            ) SELECT
+                account_id, magic_number, pair, order_type,
+                NULL, NULL, '', NOW()
+            FROM trades_group
+            WHERE account_id = ?
+            ON DUPLICATE KEY UPDATE last_update = VALUES(last_update)");
+
+            $stmt->execute([$accountId]);
             return true;
-    
         } catch (PDOException $e) {
             logMessage("Error syncing trades_config: " . $e->getMessage());
             return false;

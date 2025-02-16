@@ -13,7 +13,7 @@ class AccountModel {
     }
 
     public function getAccountByID($accountId) {
-        $stmt = $this->db->query("SELECT login, account_name AS name, broker_name, balance, equity, free_margin, last_update FROM accounts where login=$accountId");
+        $stmt = $this->db->query("SELECT *, account_name AS name FROM accounts where login=$accountId");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -36,6 +36,8 @@ class AccountModel {
                     balance = :balance,
                     equity = :equity,
                     free_margin = :free_margin,
+                    open_count = :open_count,
+                    total_volume = :total_volume,
                     remark = :ea_version,
                     last_update = :last_update
                 WHERE login = :login
@@ -47,6 +49,8 @@ class AccountModel {
                 ':balance' => $data['balance'],
                 ':equity' => $data['equity'],
                 ':free_margin' => $data['free_margin'],
+                ':open_count' => $data['open_count'],
+                ':total_volume' => $data['total_volume'],
                 ':ea_version' => $data['ea_version'],
                 ':last_update' => $now,
                 ':login' => $data['account_number']
@@ -55,9 +59,9 @@ class AccountModel {
             // Insert new account
             $insert = $this->db->prepare("
                 INSERT INTO accounts 
-                (login, account_name, broker_name, leverage, balance, equity, free_margin, init_date, last_update)
+                (login, account_name, broker_name, leverage, balance, equity, free_margin, open_count, total_volume, init_date, last_update)
                 VALUES
-                (:login, :account_name, :broker_name, :leverage, :balance, :equity, :free_margin, :init_date, :last_update)
+                (:login, :account_name, :broker_name, :leverage, :balance, :equity, :free_margin, :open_count, :total_volume, :init_date, :last_update)
             ");
             $insert->execute([
                 ':login' => $data['account_number'],
@@ -67,6 +71,8 @@ class AccountModel {
                 ':balance' => $data['balance'],
                 ':equity' => $data['equity'],
                 ':free_margin' => $data['free_margin'],
+                ':open_count' => $data['open_count'],
+                ':total_volume' => $data['total_volume'],
                 ':init_date' => $now,
                 ':last_update' => $now
             ]);

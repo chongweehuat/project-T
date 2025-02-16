@@ -83,99 +83,82 @@ class TradesConfigModel
         }
     }
 
-    public function getConfigsWithGroup($accountId)
+    public function getAllConfigs($accountId)
     {
-        $query = "
-            SELECT 
-                tc.id AS config_id,
-                tg.account_id,
-                tg.magic_number,
-                tg.pair,
-                tg.order_type,
-                tc.stop_loss,
-                tc.take_profit,
-                tc.remark,
-                tc.auth_FT,
-                tc.auth_AT,
-                tc.auth_CP,
-                tc.auth_SL,
-                tc.auth_CL,
-                tg.id AS group_id,
-                tg.total_volume,
-                tg.weighted_open_price,
-                tg.profit,
-                tg.last_update,
-                pc.point_value,
-                CASE 
-                    WHEN tg.order_type = 'sell' THEN (
-                        SELECT MAX(tp.open_price)
-                        FROM trades_open tp
-                        WHERE tp.group_id = tg.id
-                    )
-                    WHEN tg.order_type = 'buy' THEN (
-                        SELECT MIN(tp.open_price)
-                        FROM trades_open tp
-                        WHERE tp.group_id = tg.id
-                    )
-                    ELSE NULL
-                END AS extreme_open_price,
-                (
-                    SELECT MAX(tp.current_price)
-                    FROM trades_open tp
-                    WHERE tp.group_id = tg.id
-                ) AS current_price
-            FROM trades_group tg
-            LEFT JOIN trades_config tc ON tg.id = tc.group_id
-            LEFT JOIN pair_config pc ON tg.pair = pc.pair
-            WHERE tg.account_id = ?
-
-        ";
         try {
+            $query = "
+                SELECT 
+                    tc.id AS config_id,
+                    tc.account_id,
+                    tc.magic_number,
+                    tc.pair,
+                    tc.order_type,
+                    COALESCE(tg.total_volume, 0) AS total_volume,
+                    COALESCE(tg.weighted_open_price, 0) AS weighted_open_price,
+                    COALESCE(tg.profit, 0) AS profit,
+                    tc.stop_loss,
+                    tc.take_profit,
+                    tc.trigger_price,
+                    tc.trailing_stop,
+                    tc.extreme_price,
+                    tc.remark,
+                    tc.auth_FT,
+                    tc.auth_AT,
+                    tc.auth_CP,
+                    tc.auth_SL,
+                    tc.auth_CL,
+                    GREATEST(COALESCE(tc.last_update, '0000-00-00 00:00:00'), COALESCE(tg.last_update, '0000-00-00 00:00:00')) AS last_update,
+                    pc.point_value,
+                    COALESCE(a.equity, 0) AS account_equity, 
+                    CASE 
+                        WHEN tg.order_type = 'sell' THEN (
+                            SELECT MAX(tp.open_price)
+                            FROM trades_open tp
+                            WHERE tp.account_id = tg.account_id
+                            AND tp.magic_number = tg.magic_number
+                            AND tp.pair = tg.pair
+                            AND tp.order_type = tg.order_type
+                        )
+                        WHEN tg.order_type = 'buy' THEN (
+                            SELECT MIN(tp.open_price)
+                            FROM trades_open tp
+                            WHERE tp.account_id = tg.account_id
+                            AND tp.magic_number = tg.magic_number
+                            AND tp.pair = tg.pair
+                            AND tp.order_type = tg.order_type
+                        )
+                        ELSE NULL
+                    END AS extreme_open_price,
+                    (
+                        SELECT tp.current_price 
+                        FROM trades_open tp
+                        WHERE tp.account_id = tg.account_id
+                        AND tp.magic_number = tg.magic_number
+                        AND tp.pair = tg.pair
+                        AND tp.order_type = tg.order_type
+                        LIMIT 1
+                    ) AS current_price
+                FROM trades_config tc
+                LEFT JOIN trades_group tg
+                    ON tc.account_id = tg.account_id
+                    AND tc.magic_number = tg.magic_number
+                    AND tc.pair = tg.pair
+                    AND tc.order_type = tg.order_type
+                LEFT JOIN pair_config pc ON tc.pair = pc.pair
+                LEFT JOIN accounts a ON tc.account_id = a.login
+                WHERE tc.account_id = ?
+                ORDER BY tc.magic_number, tc.pair, tc.order_type
+            ";
+
             $stmt = $this->db->prepare($query);
             $stmt->execute([$accountId]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            throw new Exception("Error fetching configurations with groups: " . $e->getMessage());
+            throw new Exception("Error fetching all configurations: " . $e->getMessage());
         }
     }
 
-    public function getConfigsWithoutGroup($accountId)
-    {
-        $query = "
-            SELECT 
-                tc.id AS config_id,
-                tc.account_id,
-                tc.magic_number,
-                tc.pair,
-                tc.order_type,
-                tc.stop_loss,
-                tc.take_profit,
-                tc.remark,
-                tc.auth_FT,
-                tc.auth_AT,
-                tc.auth_CP,
-                tc.auth_SL,
-                tc.auth_CL,
-                tc.last_update,
-                pc.point_value,
-                NULL AS group_id,
-                NULL AS total_volume,
-                NULL AS weighted_open_price,
-                NULL AS extreme_open_price,
-                NULL AS current_price,
-                NULL AS profit
-            FROM trades_config tc
-            LEFT JOIN pair_config pc ON tc.pair = pc.pair
-            WHERE tc.account_id = ? AND tc.group_id IS NULL
-        ";
-        try {
-            $stmt = $this->db->prepare($query);
-            $stmt->execute([$accountId]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            throw new Exception("Error fetching configurations without groups: " . $e->getMessage());
-        }
-    }
+
 
     public function updateAuthParam($id, $param, $value)
     {
