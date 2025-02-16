@@ -5,7 +5,7 @@ require_once '/var/www/utils/Logger.php';
 
 header("Content-Type: application/json; charset=UTF-8");
 
-$debug = true; // Enable debugging for logging
+//$debug = true; // Enable debugging for logging
 
 try {
     // Ensure the request method is POST
