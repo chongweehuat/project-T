@@ -3,10 +3,11 @@ class Database {
     private static $instances = []; // Cache instances to avoid reconnecting for the same database
 
     public static function connect($dbAlias) {
-        $validAliases = ['trade', 'market']; // Define valid aliases for databases
+        $validAliases = ['trade', 'market','volatility']; // Define valid aliases for databases
         $dbConfig = [
             'trade' => 'my369sa',
             'market' => 'my369data',
+            'volatility' => 'my369volatility'
         ];
 
         // Validate the alias

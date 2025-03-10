@@ -37,7 +37,7 @@
                         <th>Free Margin</th>
                         <th>Risk Status</th>
                         <th>Remark</th>
-                        <th>Last Update</th>
+                        <th>Last Update <a href='https://sa.my369.click/?view=volatility' target='volatility'>V</a></th>
                     </tr>
                 </thead>
                 <tbody>

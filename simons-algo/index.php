@@ -21,7 +21,21 @@ switch ($view) {
             echo "Error: group_id parameter is required for Open Trades Listing.";
         }
         break;
-
+    case 'volatility':
+        include_once './views/volatility.php';
+        break;
+    case 'patchView':
+        include_once './views/patchView.php';
+        break;
+    case 'currencyVolatility':
+        include_once './views/currencyVolatility.php';
+        break;
+    case 'currencyStrength':
+        include_once './views/currencyStrength.php';
+        break;
+    case 'currencyStrengthChart':
+        include_once './views/currencyStrengthChart.php';
+        break;    
     case 'accounts':
     default:
         include_once './views/accounts.php';
