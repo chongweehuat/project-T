@@ -18,7 +18,7 @@ class Database {
         if (!isset(self::$instances[$dbAlias])) {
             try {
                 // Use environment variables for sensitive data
-                $host = getenv('DB_HOST') ?: '172.19.0.11';
+                $host = getenv('DB_HOST') ?: '172.19.0.16';
                 $port = getenv('DB_PORT') ?: '3306';
                 $user = getenv('DB_USER') ?: 'root';
                 $password = getenv('DB_PASSWORD') ?: 'CF26D23C453D3EB6';
