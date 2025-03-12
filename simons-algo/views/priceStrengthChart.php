@@ -119,57 +119,66 @@ $priceDataJson = json_encode($priceData);
 $currencyDataJson = json_encode($currencyData);
 $selectedPairJson = json_encode($selectedPair);
 ?>
+<?php
+// PHP 部分保持不变
+// ... [之前的 PHP 代码] ...
+?>
 
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+    <!-- 头部保持不变 -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="60"> <!-- 每分钟自动刷新 -->
+    <meta http-equiv="refresh" content="60">
     <title>货币配对价格及波动曲线图表</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            background-color: #f9f9f9;
-        }
-        h1 {
-            text-align: center;
-        }
-        .chart-container {
-            margin-top: 20px;
-        }
-        canvas {
-            margin-bottom: 40px;
-        }
-        .pair-selector {
-            margin-bottom: 20px;
-            text-align: center;
-        }
+        /* 样式保持不变 */
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; background-color: #f9f9f9; }
+        h1 { text-align: center; }
+        .chart-container { margin-top: 20px; }
+        canvas { margin-bottom: 40px; }
+        .pair-selector { margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
+    <!-- HTML 结构保持不变 -->
     <div class="container">
         <h1>货币配对价格及波动曲线图表</h1>
-
-        <!-- 货币配对选择器 -->
         <div class="pair-selector">
             <label for="pair-select">选择货币配对：</label>
             <select id="pair-select">
-                <option value="GBPJPY">GBPJPY</option>
                 <option value="EURUSD">EURUSD</option>
                 <option value="USDJPY">USDJPY</option>
+                <option value="GBPUSD">GBPUSD</option>
+                <option value="USDCHF">USDCHF</option>
+                <option value="AUDUSD">AUDUSD</option>
+                <option value="USDCAD">USDCAD</option>
+                <option value="NZDUSD">NZDUSD</option>
+                <option value="EURJPY">EURJPY</option>
+                <option value="GBPJPY">GBPJPY</option>
+                <option value="CHFJPY">CHFJPY</option>
+                <option value="AUDJPY">AUDJPY</option>
+                <option value="CADJPY">CADJPY</option>
+                <option value="NZDJPY">NZDJPY</option>
+                <option value="EURGBP">EURGBP</option>
+                <option value="EURAUD">EURAUD</option>
+                <option value="EURCHF">EURCHF</option>
+                <option value="EURCAD">EURCAD</option>
+                <option value="EURNZD">EURNZD</option>
+                <option value="GBPCHF">GBPCHF</option>
+                <option value="GBPAUD">GBPAUD</option>
+                <option value="GBPCAD">GBPCAD</option>
+                <option value="GBPNZD">GBPNZD</option>
+                <option value="AUDCHF">AUDCHF</option>
+                <option value="AUDCAD">AUDCAD</option>
+                <option value="AUDNZD">AUDNZD</option>
+                <option value="CADCHF">CADCHF</option>
+                <option value="NZDCHF">NZDCHF</option>
+                <option value="NZDCAD">NZDCAD</option>
             </select>
             <button onclick="updateCharts()">更新图表</button>
-            
-            <!-- 添加波动时段开关 -->
             <div style="margin-top: 10px;">
                 <label>显示波动时段：</label>
                 <input type="checkbox" id="show1h" checked> 1小时
@@ -177,15 +186,12 @@ $selectedPairJson = json_encode($selectedPair);
                 <input type="checkbox" id="show24h" checked> 24小时
             </div>
         </div>
-
-        <!-- 合并的图表 -->
         <div class="chart-container">
             <h2 id="combinedChartTitle"></h2>
             <canvas id="combinedChart"></canvas>
         </div>
     </div>
 
-    <!-- 引入 Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let priceData = <?php echo $priceDataJson; ?>;
@@ -216,7 +222,7 @@ $selectedPairJson = json_encode($selectedPair);
             localStorage.setItem('show24h', document.getElementById('show24h').checked);
         }
 
-        // 创建数据集生成函数
+        // 创建数据集生成函数（修改报价货币的曲线）
         function getDatasets() {
             const show1h = document.getElementById('show1h').checked;
             const show4h = document.getElementById('show4h').checked;
@@ -232,9 +238,10 @@ $selectedPairJson = json_encode($selectedPair);
                 }
             ];
 
-            const currency1 = selectedPair.substring(0, 3);
-            const currency2 = selectedPair.substring(3, 6);
+            const currency1 = selectedPair.substring(0, 3); // 基础货币 (如 GBP)
+            const currency2 = selectedPair.substring(3, 6); // 报价货币 (如 JPY)
 
+            // 基础货币（currency1）的波动数据保持不变
             if (show1h) {
                 datasets.push({
                     label: `${currency1} 1小时波动`,
@@ -263,10 +270,11 @@ $selectedPairJson = json_encode($selectedPair);
                 });
             }
 
+            // 报价货币（currency2）的波动数据取反
             if (show1h) {
                 datasets.push({
                     label: `${currency2} 1小时波动`,
-                    data: currencyData[currency2].map(entry => entry.value1),
+                    data: currencyData[currency2].map(entry => -entry.value1), // 取反
                     borderColor: '#4BC0C0',
                     fill: false,
                     yAxisID: 'y-volatility',
@@ -275,7 +283,7 @@ $selectedPairJson = json_encode($selectedPair);
             if (show4h) {
                 datasets.push({
                     label: `${currency2} 4小时波动`,
-                    data: currencyData[currency2].map(entry => entry.value4),
+                    data: currencyData[currency2].map(entry => -entry.value4), // 取反
                     borderColor: '#9966FF',
                     fill: false,
                     yAxisID: 'y-volatility',
@@ -284,7 +292,7 @@ $selectedPairJson = json_encode($selectedPair);
             if (show24h) {
                 datasets.push({
                     label: `${currency2} 24小时波动`,
-                    data: currencyData[currency2].map(entry => entry.value24),
+                    data: currencyData[currency2].map(entry => -entry.value24), // 取反
                     borderColor: '#C9CBCF',
                     fill: false,
                     yAxisID: 'y-volatility',
@@ -352,7 +360,7 @@ $selectedPairJson = json_encode($selectedPair);
             if (combinedChart) {
                 combinedChart.data.datasets = getDatasets();
                 combinedChart.update();
-                saveCheckboxStates(); // 每次更改时保存状态
+                saveCheckboxStates();
             }
         }
 
@@ -364,12 +372,12 @@ $selectedPairJson = json_encode($selectedPair);
         // 更新图表（货币对选择）
         function updateCharts() {
             const selectedPair = document.getElementById('pair-select').value;
-            saveCheckboxStates(); // 保存当前选择状态
+            saveCheckboxStates();
             window.location.href = `?view=priceStrengthChart&pair=${selectedPair}`;
         }
 
         // 初始化
-        loadCheckboxStates(); // 首先加载保存的状态
+        loadCheckboxStates();
         initChart();
     </script>
 </body>
