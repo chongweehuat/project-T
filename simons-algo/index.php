@@ -39,6 +39,10 @@ switch ($view) {
     case 'priceStrengthChart':
         include_once './views/priceStrengthChart.php';
         break;
+      
+    case 'checkdata':
+        include_once './views/checkdata.php';
+        break;
     case 'accounts':
     default:
         include_once './views/accounts.php';

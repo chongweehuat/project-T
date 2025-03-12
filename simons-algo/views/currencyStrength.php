@@ -135,7 +135,7 @@ function generateTableHeader($data) {
         <h1><a href='https://sa.my369.click/?view=currencyStrengthChart' target=_blank>最新货币波动强弱指标</a> <?php echo htmlspecialchars($dataTime); ?></h1>
 
         <!-- 1 小时波动值排序 -->
-        <h2>1 小时波动值排序</h2>
+        <h2><a href='https://sa.my369.click/?view=priceStrengthChart' target=_blank>1 小时波动值排序</a></h2>
         <table>
             <?php echo generateTableHeader($sortedByValue1); ?>
             <tbody>

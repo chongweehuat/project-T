@@ -12,7 +12,7 @@ try {
         throw new Exception("数据库连接失败");
     }
 
-    // 获取最新的 300 条货币波动数据
+    // 获取最新的 300 条货币波动数据（保持原DESC顺序）
     $sql = "
         SELECT currency, value1, value4, value24, dataTime 
         FROM currency_volatility 
@@ -28,7 +28,7 @@ try {
         throw new Exception("没有找到货币波动数据。");
     }
 
-    // 将数据按货币分组
+    // 将数据按货币分组并反转顺序
     $currencyData = [];
     foreach ($latestData as $data) {
         $currency = $data['currency'];
@@ -42,6 +42,12 @@ try {
             'dataTime' => $data['dataTime'],
         ];
     }
+
+    // 反转每个货币的数据顺序（从最旧到最新）
+    foreach ($currencyData as &$data) {
+        $data = array_reverse($data);
+    }
+    unset($data); // 解除引用
 
     // 释放资源
     $stmt = null;

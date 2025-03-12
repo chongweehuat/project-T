@@ -51,7 +51,7 @@ try {
         throw new Exception("没有找到数据。");
     }
 
-    // 将数据按货币分组
+    // 将波动数据按货币分组
     $currencyData = [];
     foreach ($volatilityData as $data) {
         $currency = $data['currency'];
@@ -65,6 +65,42 @@ try {
             'dataTime' => $data['dataTime'],
         ];
     }
+
+    // 检查数据长度并对齐时间戳
+    // 获取价格数据的时间戳
+    $priceTimes = array_column($priceData, 'dataTime');
+    // 获取第一个货币的波动数据时间戳（假设两个货币的波动数据时间戳一致）
+    $volatilityTimes = array_column($currencyData[$currency1], 'dataTime');
+
+    // 找到共同的时间戳
+    $commonTimes = array_intersect($priceTimes, $volatilityTimes);
+
+    if (empty($commonTimes)) {
+        logMessage("价格数据和波动数据时间戳无交集。");
+        throw new Exception("价格数据和波动数据时间戳无交集。");
+    }
+
+    // 根据共同时间戳过滤价格数据
+    $filteredPriceData = array_filter($priceData, function($entry) use ($commonTimes) {
+        return in_array($entry['dataTime'], $commonTimes);
+    });
+    $filteredPriceData = array_values($filteredPriceData); // 重置索引
+
+    // 根据共同时间戳过滤波动数据
+    foreach ($currencyData as &$data) {
+        $data = array_filter($data, function($entry) use ($commonTimes) {
+            return in_array($entry['dataTime'], $commonTimes);
+        });
+        $data = array_values($data); // 重置索引
+    }
+    unset($data); // 解除引用
+
+    // 反转数据（从最旧到最新）
+    $priceData = array_reverse($filteredPriceData);
+    foreach ($currencyData as &$data) {
+        $data = array_reverse($data);
+    }
+    unset($data); // 解除引用
 
     // 释放资源
     $stmtPrice = null;
@@ -83,6 +119,7 @@ $priceDataJson = json_encode($priceData);
 $currencyDataJson = json_encode($currencyData);
 $selectedPairJson = json_encode($selectedPair);
 ?>
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -129,9 +166,16 @@ $selectedPairJson = json_encode($selectedPair);
                 <option value="GBPJPY">GBPJPY</option>
                 <option value="EURUSD">EURUSD</option>
                 <option value="USDJPY">USDJPY</option>
-                <!-- 添加其他货币配对选项 -->
             </select>
             <button onclick="updateCharts()">更新图表</button>
+            
+            <!-- 添加波动时段开关 -->
+            <div style="margin-top: 10px;">
+                <label>显示波动时段：</label>
+                <input type="checkbox" id="show1h" checked> 1小时
+                <input type="checkbox" id="show4h" checked> 4小时
+                <input type="checkbox" id="show24h" checked> 24小时
+            </div>
         </div>
 
         <!-- 合并的图表 -->
@@ -144,129 +188,189 @@ $selectedPairJson = json_encode($selectedPair);
     <!-- 引入 Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // 获取 PHP 传递的 JSON 数据
         let priceData = <?php echo $priceDataJson; ?>;
         let currencyData = <?php echo $currencyDataJson; ?>;
         let selectedPair = <?php echo $selectedPairJson; ?>;
+        let combinedChart;
 
-        // 设置初始选择的货币配对
         document.getElementById('pair-select').value = selectedPair;
-
-        // 更新图表标题
         document.getElementById('combinedChartTitle').innerText = `${selectedPair} 价格及波动`;
 
-        // 提取时间戳作为 X 轴标签
         const labels = priceData.map(entry => entry.dataTime);
 
-        // 创建合并的图表
-        const ctxCombined = document.getElementById('combinedChart').getContext('2d');
-        const combinedChart = new Chart(ctxCombined, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    // 价格数据
-                    {
-                        label: `${selectedPair} 价格`,
-                        data: priceData.map(entry => entry.price),
-                        borderColor: '#36A2EB', // 蓝色
-                        fill: false,
-                        yAxisID: 'y-price', // 使用价格轴
-                    },
-                    // 货币1的波动数据
-                    {
-                        label: `${selectedPair.substring(0, 3)} 1小时波动`,
-                        data: currencyData[selectedPair.substring(0, 3)].map(entry => entry.value1),
-                        borderColor: '#FF6384', // 红色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                    {
-                        label: `${selectedPair.substring(0, 3)} 4小时波动`,
-                        data: currencyData[selectedPair.substring(0, 3)].map(entry => entry.value4),
-                        borderColor: '#FF9F40', // 橙色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                    {
-                        label: `${selectedPair.substring(0, 3)} 24小时波动`,
-                        data: currencyData[selectedPair.substring(0, 3)].map(entry => entry.value24),
-                        borderColor: '#FFCD56', // 黄色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                    // 货币2的波动数据
-                    {
-                        label: `${selectedPair.substring(3, 6)} 1小时波动`,
-                        data: currencyData[selectedPair.substring(3, 6)].map(entry => entry.value1),
-                        borderColor: '#4BC0C0', // 绿色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                    {
-                        label: `${selectedPair.substring(3, 6)} 4小时波动`,
-                        data: currencyData[selectedPair.substring(3, 6)].map(entry => entry.value4),
-                        borderColor: '#9966FF', // 紫色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                    {
-                        label: `${selectedPair.substring(3, 6)} 24小时波动`,
-                        data: currencyData[selectedPair.substring(3, 6)].map(entry => entry.value24),
-                        borderColor: '#C9CBCF', // 灰色
-                        fill: false,
-                        yAxisID: 'y-volatility', // 使用波动轴
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: `${selectedPair} 价格及波动`,
-                    },
-                },
-                scales: {
-                    x: {
-                        display: true,
-                        title: {
-                            display: true,
-                            text: '时间',
-                        },
-                    },
-                    yPrice: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: '价格',
-                        },
-                        id: 'y-price',
-                    },
-                    yVolatility: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: '波动值',
-                        },
-                        id: 'y-volatility',
-                        grid: {
-                            drawOnChartArea: false, // 避免与左侧轴重叠
-                        },
-                    },
-                },
-            },
-        });
+        // 从 localStorage 恢复开关状态
+        function loadCheckboxStates() {
+            const show1h = localStorage.getItem('show1h') === 'false' ? false : true;
+            const show4h = localStorage.getItem('show4h') === 'false' ? false : true;
+            const show24h = localStorage.getItem('show24h') === 'false' ? false : true;
 
-        // 更新图表
+            document.getElementById('show1h').checked = show1h;
+            document.getElementById('show4h').checked = show4h;
+            document.getElementById('show24h').checked = show24h;
+        }
+
+        // 保存开关状态到 localStorage
+        function saveCheckboxStates() {
+            localStorage.setItem('show1h', document.getElementById('show1h').checked);
+            localStorage.setItem('show4h', document.getElementById('show4h').checked);
+            localStorage.setItem('show24h', document.getElementById('show24h').checked);
+        }
+
+        // 创建数据集生成函数
+        function getDatasets() {
+            const show1h = document.getElementById('show1h').checked;
+            const show4h = document.getElementById('show4h').checked;
+            const show24h = document.getElementById('show24h').checked;
+
+            let datasets = [
+                {
+                    label: `${selectedPair} 价格`,
+                    data: priceData.map(entry => entry.price),
+                    borderColor: '#36A2EB',
+                    fill: false,
+                    yAxisID: 'y-price',
+                }
+            ];
+
+            const currency1 = selectedPair.substring(0, 3);
+            const currency2 = selectedPair.substring(3, 6);
+
+            if (show1h) {
+                datasets.push({
+                    label: `${currency1} 1小时波动`,
+                    data: currencyData[currency1].map(entry => entry.value1),
+                    borderColor: '#FF6384',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+            if (show4h) {
+                datasets.push({
+                    label: `${currency1} 4小时波动`,
+                    data: currencyData[currency1].map(entry => entry.value4),
+                    borderColor: '#FF9F40',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+            if (show24h) {
+                datasets.push({
+                    label: `${currency1} 24小时波动`,
+                    data: currencyData[currency1].map(entry => entry.value24),
+                    borderColor: '#FFCD56',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+
+            if (show1h) {
+                datasets.push({
+                    label: `${currency2} 1小时波动`,
+                    data: currencyData[currency2].map(entry => entry.value1),
+                    borderColor: '#4BC0C0',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+            if (show4h) {
+                datasets.push({
+                    label: `${currency2} 4小时波动`,
+                    data: currencyData[currency2].map(entry => entry.value4),
+                    borderColor: '#9966FF',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+            if (show24h) {
+                datasets.push({
+                    label: `${currency2} 24小时波动`,
+                    data: currencyData[currency2].map(entry => entry.value24),
+                    borderColor: '#C9CBCF',
+                    fill: false,
+                    yAxisID: 'y-volatility',
+                });
+            }
+
+            return datasets;
+        }
+
+        // 初始化图表
+        function initChart() {
+            const ctxCombined = document.getElementById('combinedChart').getContext('2d');
+            combinedChart = new Chart(ctxCombined, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: getDatasets()
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `${selectedPair} 价格及波动`,
+                        },
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: '时间',
+                            },
+                        },
+                        yPrice: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '价格',
+                            },
+                            id: 'y-price',
+                        },
+                        yVolatility: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '波动值',
+                            },
+                            id: 'y-volatility',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        },
+                    },
+                },
+            });
+        }
+
+        // 更新图表显示
+        function refreshChart() {
+            if (combinedChart) {
+                combinedChart.data.datasets = getDatasets();
+                combinedChart.update();
+                saveCheckboxStates(); // 每次更改时保存状态
+            }
+        }
+
+        // 绑定开关事件
+        document.getElementById('show1h').addEventListener('change', refreshChart);
+        document.getElementById('show4h').addEventListener('change', refreshChart);
+        document.getElementById('show24h').addEventListener('change', refreshChart);
+
+        // 更新图表（货币对选择）
         function updateCharts() {
             const selectedPair = document.getElementById('pair-select').value;
-            window.location.href = `?pair=${selectedPair}`;
+            saveCheckboxStates(); // 保存当前选择状态
+            window.location.href = `?view=priceStrengthChart&pair=${selectedPair}`;
         }
+
+        // 初始化
+        loadCheckboxStates(); // 首先加载保存的状态
+        initChart();
     </script>
 </body>
 </html>
