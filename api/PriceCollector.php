@@ -2,7 +2,7 @@
 require_once '/var/www/db/database.php';
 require_once '/var/www/utils/Logger.php';
 
-$debug=true;
+//$debug=true;
 
 // 接收POST数据
 $symbol = $_POST['symbol'];
